@@ -1,0 +1,119 @@
+---
+title: "Candidate compounds untargeted metabolite analysis"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+This script provides the analysis for the time series metabolite data detection of candidate compounds which were used to create Figure S4B. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+rm(list=ls())
+```
+
+```{r,include=FALSE, warning=FALSE}
+# install.packages("dplyr")
+# install.packages("magrittr")
+# install.packages("tidyr")
+# install.packages("stringr")
+# install.packages("ggpubr")
+# install.packages("readxl")
+# install.packages("pander")
+# install.packages("ggplot2")
+# install.packages("multcomp")
+# install.packages("multcompView")
+# install.packages("emmeans")
+# install.packages("forcats")
+# install.packages("rstatix")
+# install.packages("ggpmisc")
+```
+
+```{r libraries, echo=F, message=F, warning=F}
+library("dplyr")
+library("magrittr")
+library("tidyr")
+library("stringr")
+library("ggpubr")
+library("readxl")
+library("pander")
+library("ggplot2")
+library("multcomp")
+library("multcompView")
+library("emmeans")
+library("forcats")
+library("rstatix")
+library("ggpmisc")
+```
+
+```{r functions, echo=F, message=F}
+give.n <- function(x){
+  return(c(y = median(x)*1.05, label = length(x)))}
+```
+
+```{r, warning=F, echo=F, message=F}
+data <- readxl::read_excel("./Input/1_metabolite_data_qTOF_untargeted_analysis.xlsx", sheet = 8)
+```
+
+```{r, warning=F, echo=F, message=F}
+data_conc <- data %>% 
+  pivot_longer(7:17,
+  names_repair = "check_unique",
+  values_drop_na = FALSE) %>% 
+  dplyr::rename(Sample = name, Normalized_abundance = value)
+
+data_conc_sep <- data_conc %>% separate(
+  Sample,
+  c("SynCom", "Timepoint", "Treatment"),
+  sep = "_",
+  remove = TRUE,
+  convert = FALSE,
+  extra = "warn",
+  fill = "warn")
+```
+
+```{r, warning=F, echo=F, message=F}
+data_conc_sep %>% ggplot(aes(x = interaction(Timepoint, Treatment), y = as.numeric(Normalized_abundance))) +
+                           geom_point(aes(colour = Treatment)) +
+  facet_wrap(~Hit, scales = "free_y") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5 ))
+```
+
+```{r, warning=F, echo=F, message=F}
+candidates_SCR_bar <- data_conc_sep %>% 
+   as.data.frame() %>% 
+  filter(!Treatment %in% NA) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Compound %in% c("2.92_139.0640n", "2.96_181.0740n")) %>% 
+  mutate(Compound = factor(Compound, levels = c("2.96_181.0740n", "2.92_139.0640n"))) %>% 
+  ggplot(aes(x = Timepoint, y = as.numeric(Normalized_abundance))) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = c("gold2", "maroon"), labels = c("HMPAA", "AMP")) +
+  facet_wrap(~ SynCom, labeller = as_labeller(c("SCR" = "metSC")))+
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  theme_classic() +
+  labs(x = "Time [h]", 
+       y = "normalized abundance")
+
+
+candidates_SCR_bar
+
+ggsave(plot = candidates_SCR_bar, filename = "FigS3_candidates_SCR_bar.svg", path = "../../all_figures", width = 8.8, height = 6, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r}
+sessionInfo()
+```
+

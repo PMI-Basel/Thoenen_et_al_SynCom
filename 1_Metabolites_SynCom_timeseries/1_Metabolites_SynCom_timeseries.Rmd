@@ -1,0 +1,318 @@
+---
+title: "SynCom metabolites time series experiment"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+This script provides the analysis for the time series metabolite data which were used to create Figure 1B, Figure S3C and Figure S4A. 
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE, warning=FALSE}
+rm(list = ls())
+```
+
+```{r,include=FALSE}
+# install.packages("dplyr") 
+# install.packages("magrittr") # for the %>% function
+# install.packages("ggplot2") # plots
+# install.packages("readxl") # to read excels
+# install.packages("stringr")
+# install.packages("MESS") # for auc function
+# install.packages("purrr")
+# install.packages("multcomp")
+# install.packages("emmeans")
+# install.packages("ggpubr")
+# install.packages("forcats")
+# install.packages("readr")
+# install.packages("ggpmisc")
+# install.packages("pander")
+# install.packages("rstatix")
+```
+
+```{r,include=FALSE, warning=FALSE}
+library("dplyr")
+library("magrittr")
+library("ggplot2")
+library("readxl")
+library("tidyr")
+library("readr")
+library("stringr")
+library("MESS") 
+library("purrr")
+library("multcomp")
+library("emmeans")
+library("ggpubr")
+library("forcats")
+library("readr")
+library("ggpmisc")
+library("pander")
+library("rstatix")
+```
+
+```{r, include=FALSE, warning=FALSE}
+# Metadata
+metadata <- read_excel("./Input/1_sample_list_qTOF.xlsx")
+
+# Metabolite data
+met <- read_excel("./Input/1_metabolite_data_qTOF.xlsx")
+met %<>% dplyr::rename(Std_conc = `Std. Conc`) %>%  
+  mutate(Compound = gsub("MHPA", "HMPAA", Compound)) 
+
+# Molecular weights
+mol <- read_excel("./Input/Molecular_weight_BXDs.xlsx") %>% 
+        mutate(Compound = gsub("MHPA", "HMPAA", Compound))
+```
+
+```{r, warning=F, echo=F, message=F}
+# Change SynCom name
+metadata %<>% 
+  mutate(Sample_ID = str_replace_all(Sample_ID, c("SCS" = "nonSC", "SCR" = "metSC"))) %>% 
+  mutate(Strain = str_replace_all(Strain, c("SCS" = "nonSC", "SCR" = "metSC")))
+
+met %<>% 
+  mutate(Name = str_replace_all(Name, c("SCS" = "nonSC", "SCR" = "metSC"))) %>% 
+  mutate(Name = str_replace_all(Name, c("20201116_TZ_LT_BacTime_" = ""))) %>% 
+  mutate(Name = str_replace_all(Name, "MHPA", "HMPAA")) %>% 
+  mutate(Compound = gsub("MHPA", "HMPAA", Compound))
+```
+
+## Slopes for quantification
+
+```{r, warning=F, echo=F, message=F}
+met %<>% 
+  mutate(Std_Type = Type) %>% 
+  mutate(Std_Type = dplyr::case_when(Name %in% c("PM_Stds13x_10ng",
+                                                 "PM_Stds13x_50ng",
+                                                 "PM_Stds13x_200ng", 
+                                                 "PM_Stds13x_400ng") ~ "Std_13x", 
+                                     Name %in% c("HMPAA_1ug", 
+                                                 "HMPAA_10ug", 
+                                                 "HMPAA_40ng",
+                                                 "HMPAA_200ng",
+                                                 "HMPAA_1000ng") ~ "Std_HMPAA"))
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Std <- met %>% 
+  filter(Std_Type %in% "Std_13x") %>% 
+  filter(Std_conc != "0") %>% 
+  filter(RT != "0") %>% 
+  filter(Compound %in% c("AAMPO", "AMPO", "APO", "BOA", "DIMBOA", "HMBOA", "HMPMA", "MBOA", "MBOA-Glc")) %>% 
+  dplyr::select(Std_conc, Area, Compound)
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Zero <- met %>% 
+  filter(Type %in% "Zero") %>% 
+  filter(Std_conc %in% "0") %>% 
+  filter(Compound %in% c("AAMPO", "AMPO", "APO", "BOA", "DIMBOA", "HMBOA", "HMPMA", "MBOA", "MBOA-Glc")) %>% 
+  dplyr::select(Std_conc, Area, Compound)
+
+met_Std <- rbind(met_Std, met_Zero)
+met_Std %<>% filter(!Std_conc %in% "NA")
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Std_HMPAA <- met %>% 
+  filter(Std_conc != "10000") %>% 
+  filter(Std_Type %in% "Std_HMPAA") %>% 
+  filter(Std_conc != "0") %>% 
+  filter(!Std_conc %in% "NA") %>% 
+  filter(Compound %in% "HMPAA") %>% 
+  dplyr::select(Std_conc, Area, Compound)
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Zero_HMPAA <- met %>% 
+  filter(Type %in% "Zero") %>% 
+  filter(Std_conc %in% "0") %>% 
+  filter(Compound %in% c("HMPAA")) %>% 
+  dplyr::select(Std_conc, Area, Compound)
+
+met_Std_HMPAA <- rbind(met_Std_HMPAA, met_Zero_HMPAA)
+met_Std_HMPAA %<>% filter(!Std_conc %in% "NA")
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Std <- rbind(met_Std, met_Std_HMPAA)
+```
+
+```{r, warning=F, echo=F, message=F}
+met_Std %>% as.data.frame() %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  ggplot(aes(x= Std_conc, y = Area)) + 
+  geom_point(aes(colour = Compound), show.legend = FALSE) +
+  geom_smooth(method = "lm", color="black", formula = y ~ 0 + x) +
+  stat_poly_eq(formula = y ~ 0 + x,
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+                parse = TRUE, label.y.npc = "top", label.x.npc = "left") +
+  facet_wrap(~Compound, scales = "free") +
+  labs(y = "Area",
+       x = "Concentration")
+```
+
+```{r, warning=F, echo=F, message=F}
+St_slopes <- met_Std %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>%
+  group_by(Compound) %>% 
+  do(lm(Area ~ 0 + Std_conc,  data = .) %>%  coef() %>%   as.data.frame() %>% slice(1))
+```
+
+```{r, warning=F, echo=F, message=F}
+colnames(St_slopes) <- c("Compound", "Slope")
+```
+
+# Samples
+
+```{r, echo=FALSE, warning=FALSE}
+met %<>% filter(Type %in% "Analyte")
+met <- left_join(met, mol, by = "Compound")
+met %<>% mutate(M = as.numeric(M)) # NAs can not be mutated to numeric, a small error message pops up
+```
+
+```{r, echo=FALSE, warning=FALSE}
+metadata %<>% dplyr::rename(Name = Sample_ID)
+
+met <- left_join(met, metadata, by = "Name")
+met %<>% as.data.frame()
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met %<>% filter(Strain %in% c("LMB2", "LMI1x", "LMX9", "LMG1", "LMN1", "LST17", "LBA21", 
+                              "metSC", "nonSC", "NBC")) %>% 
+         mutate(Strain = factor(Strain, levels = c("LMB2", "LMI1x", "LMX9", "LMG1", "LMN1", "LST17", "LBA21",
+                              "metSC", "nonSC","NBC"))) %>% 
+         mutate(Treatment = factor(Treatment, levels = c("DMSO", "MBOA"))) %>% 
+         mutate(Compound = gsub("MHPA", "HMPAA", Compound)) 
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met <- left_join(met, St_slopes, by = "Compound")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met$cols <- as.character(met$Compound)
+met[met$Compound == "AMPO", ]$cols <- "darkred"
+met[met$Compound == "AAMPO", ]$cols <- "firebrick1"
+met[met$Compound == "HMPAA", ]$cols <- "gold2"
+met[met$Compound == "MBOA", ]$cols <- "darkblue"
+met[met$Compound == "HMBOA", ]$cols <- "skyblue"
+met[met$Compound == "BOA", ]$cols <- "slateblue"
+met[met$Compound == "MBOA-Glc", ]$cols <- "slategray"
+met[met$Compound == "HMPMA", ]$cols <-  "slategray"
+met[met$Compound == "DIMBOA", ]$cols <-  "slategray"
+met[met$Compound == "APO", ]$cols <-  "slategray"
+met[met$Compound == "AAPO", ]$cols <-  "slategray"
+
+
+temp <- data.frame(met$Compound, met$cols)
+temp <- plyr::ddply(temp, .variables="met.Compound", .fun=unique)   #library(plyr)
+level_cols_Compound <- as.character(temp[,2])
+names(level_cols_Compound) <- temp[,1]
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met %<>% mutate(Area_sample = as.numeric(Area)/0.02) %>% 
+        mutate(ng_sample = Area_sample/Slope) %>% 
+        mutate(uMol = ng_sample/M) %>% 
+        replace(is.na(.), 0) 
+```
+
+# All metabolites in all samples
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+met %>% 
+  filter(!Compound %in% c("AAPO", "APO")) %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  ggplot(aes(x = Timepoint, y = as.numeric(Area), group = Treatment)) +
+  geom_point(aes(colour = Compound), show.legend = TRUE) +
+  facet_wrap(~ Compound, scales = "free") +
+  scale_colour_manual(values = level_cols_Compound)+
+  theme_bw() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  labs (title = "all metabolites in all samples", 
+        y = "concentration [uMol]") 
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,4)}
+MBOA_met_SynCom_Timeseries <- met %>% 
+  filter(Strain %in% c("NBC", "metSC", "nonSC")) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Timepoint %in% "68") %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
+  # filter(!Strain %in% "LMI1x" |  !Compound %in% "HMPAA") %>% # 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  ggplot(aes(x = Strain, y = uMol, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = level_cols_Compound) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))+
+  labs(x = "", y = "Concentration [µM]", fill = "")
+
+MBOA_met_SynCom_Timeseries
+
+ggsave(plot = MBOA_met_SynCom_Timeseries, filename = "Fig_1B_MBOA_met_SynCom_Timeseries.svg", path = "../../all_figures", width=6, height=6, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,4)}
+MBOA_met_LMX9_Timeseries <- met %>% 
+  filter(Strain %in% c("NBC", "LMX9", "LMB2")) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Timepoint %in% "68") %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "LMX9", "LMB2"))) %>% 
+  # filter(!Strain %in% "LMI1x" |  !Compound %in% "HMPAA") %>% # 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  ggplot(aes(x = Strain, y = uMol, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = level_cols_Compound) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))+
+  labs(x = "", y = "Concentration [µM]", fill = "")
+
+MBOA_met_LMX9_Timeseries
+
+ggsave(plot = MBOA_met_LMX9_Timeseries, filename = "Fig_S3C_MBOA_met_LMX9_Timeseries.svg", path = "../../all_figures", width=6, height=4, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,4)}
+Time_SynCom_met <- met %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  filter(Strain %in% c("NBC", "nonSC", "metSC")) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
+  ggplot(aes(x = Timepoint, y = uMol, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  facet_wrap(~ Strain, scales = "fixed", nrow = 1) +
+  scale_fill_manual(values = c("darkred", "gold2", "darkblue")) +
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  theme_classic() +
+  labs(x = "Time [h]", 
+       y = "Concentration [µMl]")
+
+Time_SynCom_met
+
+ggsave(plot = Time_SynCom_met, filename = "Fig_S4A_Time_SynCom_met.pdf", path = "../../all_figures", width = 12, height = 6, dpi = 300, scale = 1, units = "cm")
+
+ggsave(plot = Time_SynCom_met, filename = "Fig_S4A_Time_SynCom_met.svg", path = "../../all_figures", width = 12, height = 6, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r}
+sessionInfo()
+```
+

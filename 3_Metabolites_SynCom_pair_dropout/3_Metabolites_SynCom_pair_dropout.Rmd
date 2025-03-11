@@ -1,0 +1,668 @@
+---
+title: "Pair and dropout communities SynCom"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+This script provides the analysis for the pair and dropout metabolite data which were used to create Figure 2.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+```
+
+```{r,include=FALSE}
+# install.packages("dplyr") 
+# install.packages("magrittr") # for the %>% function
+# install.packages("ggplot2") # plots
+# install.packages("readxl") # to read excels
+# install.packages("stringr")
+# install.packages("MESS") # for auc function
+# install.packages("purrr")
+# install.packages("multcomp")
+# install.packages("emmeans")
+# install.packages("ggpubr")
+# install.packages("forcats")
+# install.packages("readr")
+# install.packages("ggpmisc")
+# install.packages("pander")
+# install.packages("rstatix")
+# install.packages("pheatmap")
+```
+
+```{r,include=FALSE}
+library("dplyr")
+library("magrittr")
+library("ggplot2")
+library("readxl")
+library("tidyr")
+library("readr")
+library("stringr")
+library("MESS") 
+library("purrr")
+library("multcomp")
+library("emmeans")
+library("ggpubr")
+library("forcats")
+library("readr")
+library("ggpmisc")
+library("pander")
+library("rstatix")
+library("pheatmap")
+```
+
+# Data
+```{r, echo=FALSE, warning=FALSE}
+# Metadata
+metadata <- read_excel("./Input/3_samples_metabolites_combo.xlsx") %>% dplyr::select(-random, -Nr) %>% distinct() %>%  
+  mutate(Sample_ID = gsub("SCR", "metSC", Sample_ID)) %>% 
+  mutate(Strain = gsub("SCR", "metSC", Strain)) %>% 
+  mutate(Sample_ID = gsub("SCS", "nonSC", Sample_ID)) %>% 
+  mutate(Strain = gsub("SCS", "nonSC", Strain)) 
+# Metabolite data
+met <- read_excel("./Input/3_Bact_combo_metabolites.xlsx") %>% 
+  mutate(Name = gsub("SCR", "metSC", Name)) %>% 
+  mutate(Name = gsub("SCS", "nonSC", Name)) %>% 
+  dplyr::rename(Std_conc = `Std. Conc`)
+# Molecular weights
+mol <- read_excel("./Input/Molecular_weight_BXDs.xlsx")
+```
+
+## Benzoxazinoids quantification
+
+```{r, echo=FALSE, warning=FALSE}
+met_Std <- met %>% 
+  filter(Type %in% "Standard") %>% 
+  filter(Std_conc != "0") %>% 
+  filter(Compound != c("AAPO", "MHPA")) %>% 
+  filter(!Name %in% c("20211123_MH_LT_Bact_MHPA_40ng", "20211123_MH_LT_Bact_MHPA_200ng", "20211123_MH_LT_Bact_MHPA_1000ng")) %>% 
+  dplyr::select(Std_conc, Area, Compound) %>% 
+  filter(!Std_conc %in% "NA")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met_Std %>% as.data.frame() %>% 
+  filter(!Compound %in% c("AAPO", "MHPA")) %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  ggplot(aes(x= Std_conc, y = Area)) + 
+  geom_point(aes(colour = Compound), show.legend = FALSE) +
+  geom_smooth(method = "lm", color="black", formula = y ~ 0 + x) +
+  stat_poly_eq(formula = y ~ 0 + x,
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+                parse = TRUE, label.y.npc = "top", label.x.npc = "left") +
+  stat_fit_glance(method = "lm", method.args = list(formula = y ~ 0 + x),
+                      geom = 'text', aes(label = paste("P-val. = ", 
+                      signif(..p.value.., digits = 4), sep = "")), label.y = "bottom", label.x = "center") +
+  facet_wrap(~Compound, scales = "free") +
+  labs(y = "Area",
+       x = "Concentration")
+```
+
+```{r, warning=F, echo=F, message=F}
+St_slopes <- met_Std %>% 
+  filter(!Compound %in% c("AAPO", "MHPA")) %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>%
+  group_by(Compound) %>% 
+  do(lm(Area ~ 0 + Std_conc,  data = .) %>%  coef() %>%   as.data.frame() %>% slice(1))
+
+colnames(St_slopes) <- c("Compound", "Slope")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met_Std_MHPA <- met %>% 
+  filter(Type %in% "Standard") %>% 
+  filter(Std_conc != "0") %>% 
+  filter(Compound %in% "MHPA") %>% 
+  filter(Name %in% c("20211123_MH_LT_Bact_MHPA_40ng", "20211123_MH_LT_Bact_MHPA_200ng", "20211123_MH_LT_Bact_MHPA_1000ng")) %>% 
+  dplyr::select(Std_conc, Area, Compound) %>% 
+  filter(!Std_conc %in% "NA")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met_Std_MHPA %>% as.data.frame() %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  ggplot(aes(x= Std_conc, y = Area)) + 
+  geom_point(aes(colour = Compound), show.legend = FALSE) +
+  geom_smooth(method = "lm", color="black", formula = y ~ 0 + x) +
+  stat_poly_eq(formula = y ~ 0 + x,
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+                parse = TRUE, label.y.npc = "top", label.x.npc = "left") +
+  stat_fit_glance(method = "lm", method.args = list(formula = y ~ 0 + x),
+                      geom = 'text', aes(label = paste("P-val. = ", 
+                      signif(..p.value.., digits = 4), sep = "")), label.y = "bottom", label.x = "center") +
+  facet_wrap(~Compound, scales = "free") +
+  labs(y = "Area",
+       x = "Concentration")
+```
+
+```{r, warning=F, echo=F, message=F}
+St_slopes_MHPA <- met_Std_MHPA %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  mutate(Std_conc = as.numeric(Std_conc)) %>%
+  group_by(Compound) %>% 
+  do(lm(Area ~ 0 + Std_conc,  data = .) %>%  coef() %>%   as.data.frame() %>% slice(1))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+colnames(St_slopes_MHPA) <- c("Compound", "Slope")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+St_slopes <- rbind(St_slopes, St_slopes_MHPA)
+```
+
+## Data formatting
+```{r, echo=FALSE, warning=FALSE}
+met$Name <- gsub("20211123_MH_LT_Bact_", "", met$Name)
+met$Name <- gsub("LRC7-O", "LRC7.O", met$Name)
+met %<>% filter(Type %in% "Analyte")
+met <- left_join(met, mol, by = "Compound")
+met %<>% mutate(M = as.numeric(M)) %>% mutate(Name = gsub("NBC_D", "NBC_c_D", Name)) %>% mutate(Name = gsub("NBC_M", "NBC_c_M", Name))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+metadata %<>% dplyr::rename(Name = Sample_ID) 
+met <- left_join(met, metadata, by = "Name") 
+met %<>% as.data.frame()
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met$Treatment <- factor(met$Treatment, levels = c("DMSO", "MBOA"))
+met$Strain <- gsub("_d", "", met$Strain)
+met$Strain <- gsub("_c", "", met$Strain)
+
+met$Strain_exp <- interaction(met$Strain, met$experiment, sep = "_")
+met$Strain_exp <- gsub("_dropout", "_d", met$Strain_exp)
+met$Strain_exp <- gsub("_combo", "_c", met$Strain_exp)
+
+met <- left_join(met, St_slopes, by = "Compound")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met$Area_sample <- as.numeric(met$Area) / 0.02 
+met$ng_sample <- met$Area_sample / met$Slope 
+met$uMol <- (met$ng_sample) / met$M
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met %<>% mutate(Compound = gsub("MHPA", "HMPAA", Compound)) %>% 
+         mutate(Compound = gsub("MAPH", "AMP", Compound))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met$cols <- as.character(met$Compound)
+met[met$Compound == "AMPO", ]$cols <- "darkred"
+met[met$Compound == "AAMPO", ]$cols <- "firebrick1"
+met[met$Compound == "HMPAA", ]$cols <- "gold2"
+met[met$Compound == "MBOA", ]$cols <- "darkblue"
+
+met[met$Compound == "HMBOA", ]$cols <- "skyblue"
+met[met$Compound == "BOA", ]$cols <- "slateblue"
+
+met[met$Compound == "MBOA-Glc", ]$cols <- "slategray"
+met[met$Compound == "HMPMA", ]$cols <-  "slategray"
+met[met$Compound == "DIMBOA", ]$cols <-  "slategray"
+met[met$Compound == "APO", ]$cols <-  "slategray"
+met[met$Compound == "AAPO", ]$cols <-  "slategray"
+
+
+temp <- data.frame(met$Compound, met$cols)
+temp <- plyr::ddply(temp, .variables="met.Compound", .fun=unique)   #library(plyr)
+level_cols_Compound <- as.character(temp[,2])
+names(level_cols_Compound) <- temp[,1]
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met %<>% filter(!Compound %in% c("VAA", "DIBOA-Glc", "HBOA-Glc")) %>% 
+         filter(Strain %in% c("LMB2", "LMI1x", "LMX9", "LMX9231", "LBA112", "LMG1", "LMN1", "LST17", "LBA21", "metSC", "nonSC", "SC3", "SC32", "NBC"))
+```
+
+Pairs
+- LMB2 + LBA21
+- LMB2 pure
+- LMB2 + LMG1
+- LMB2 + LMN1
+- LMB2 + LMX9
+- LMB2 + LMX92
+- LMB2 + LMX922
+- LMB2 + LMX923
+- LMB2 + LMX9231
+- LMB2 + LST17
+
+Dropout
+- complete community - metSC: LMB2, LBA21, LMG1, LMN1, LST17, LMX9, LMX9231
+- for each dropout community one strain is left out
+
+SynComs
+- metSC: LMB2, LBA21, LMG1, LMN1, LST17, LMX9, LMX9231
+- metSC2: LMB2, LBA21, LMG1, LMN1, LST17, LMX9, LMX922
+
+reduced SynComs
+- SC3: LMB2, LMX9, LMX9231
+- SC32: LMB2, LMX9, LMX922
+
+```{r, echo=FALSE, warning=FALSE}
+met %>% filter(Strain %in% "NBC") %>% filter(Compound %in% "MBOA")
+```
+
+# Plottiing
+## quantitative data
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+met %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  ggplot(aes(x = Strain, y = as.numeric(Area), group = Treatment)) +
+  geom_point(aes(colour = Strain), show.legend = TRUE) +
+  facet_wrap(~ Compound, scales = "free") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) 
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+met %>% 
+  as.data.frame() %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(!Strain %in% c("LMB2", "NBC")) %>% 
+  filter(experiment %in% "combo") %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  filter(experiment !="NA") %>% 
+  ggplot(aes(x = as.factor(Strain), y = uMol)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  ylim(0, 600) +
+  scale_fill_manual(values = level_cols_Compound)+
+  theme_bw() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  labs(title = "pairs", 
+       x = "")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+pairs_MBOA_met <- met %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  mutate(Compound = factor(Compound, levels = c("HMPAA", "AMPO", "MBOA"))) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Strain_exp %in% c("NBC_d", "metSC_d", "LST17_c", "LMX9231_c", "LMX9_c", "LBA21_c", "LMN1_c", "LMG1_c", "LMB2_c")) %>% 
+  mutate(Strain = factor(Strain, levels = rev(c("NBC", "LMB2", "LBA21", "LMG1", "LMN1", "LMX9", "LMX9231", "LST17", "metSC")))) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  filter(experiment !="NA") %>% 
+  ggplot(aes(x = as.factor(Strain), y = uMol)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = c("gold2", "darkred", "darkblue")) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = 0, hjust = 0, vjust = 0.5)) +
+  coord_flip()+
+  scale_x_discrete(labels= rev(c("NBC", "LMB2", "LBA21 + LMB2", "LMG1 + LMB2", "LMN1 + LMB2", "LMX9 + LMB2", "LMX9231 + LMB2", "LST17 + LMB2", "metSC")))+
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  labs(title = "pairs", 
+       y = "Concentration [µM]",
+       x = "",
+       fill = " ")
+
+pairs_MBOA_met
+
+ggsave(plot = pairs_MBOA_met, filename = "Fig_2_pairs_MBOA_met.svg", path = "../../all_figures", width = 8.8, height = 9, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+dropout_MBOA_met <- met %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  mutate(Compound = factor(Compound, levels = c("HMPAA", "AMPO", "MBOA"))) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Strain_exp %in% c("LBA21_d", "LMN1_d", "LMX9231_d", "LMX9_d", "LMG1_d", "LST17_d", "LMB2_d", "metSC_d", "NBC_d")) %>% 
+  mutate(Strain = factor(Strain, levels = rev(c("NBC", "LMB2", "LBA21", "LMG1", "LMN1", "LMX9", "LMX9231", "LST17", "metSC")))) %>% 
+  filter(experiment !="NA") %>% 
+  unique() %>% 
+  ggplot(aes(x = as.factor(Strain), y = uMol)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = c("gold2", "darkred", "darkblue")) +
+  coord_flip()+
+  scale_x_discrete(labels= rev(c("NBC", "metSC - LMB2", "metSC - LBA21", "metSC - LMG1", "metSC - LMN1", "metSC - LMX9", "metSC - LMX9231", "metSC - LST17", "metSC")))+
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  # facet_wrap(~experiment) + 
+  labs(title = "dropout", 
+       x = "",
+       fill = " ")
+
+dropout_MBOA_met
+
+ggsave(plot = dropout_MBOA_met, filename = "Fig_2_dropout_MBOA_met.svg", path = "../../all_figures", width = 8.8, height = 9, dpi = 300, scale = 1, units = "cm")
+```
+
+## quantitative heatmap
+not to degrade MBOA: ±10% of the control
+weak MBOA-degraders: >30% degraded compared to the control
+strong MBOA-degraders: >90% degraded
+
+strong AMPO-formers: 
+weak AMPO-formers: <10% of max. AMPO-former
+non-AMPO-formers <0.1% of max. AMPO-former
+
+strong HMPAA-formers: 
+weak HMPAA-formers: <10% of max. HMPAA-former
+non-HMPAA-formers <0.1% of max. HMPAA-former
+
+```{r, echo=FALSE, warning=FALSE}
+met_combo_MBOA_max <- met %>% 
+  filter(Strain_exp %in% c("LBA21_d", "LMN1_d", "LMX9231_d", "LMX9_d", "LMG1_d", "LST17_d", "LMB2_d", "metSC_d", "NBC_d")) %>% 
+                            mutate(uMol = replace_na(uMol, 0)) %>% 
+                            filter(Treatment %in% "MBOA") %>% 
+                            group_by(Compound) %>% 
+                            dplyr::summarise(max_conc = max(uMol))
+# MBOA measured
+met_combo_MBOA_NBC <- met %>% 
+  mutate(uMol = replace_na(uMol, 0)) %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AAMPO", "AMPO")) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Strain_exp %in% c("NBC_d")) %>% 
+  group_by(Compound) %>% 
+  dplyr::summarise(max_conc = max(uMol))
+
+MBOA_max_NBC <- met_combo_MBOA_NBC %>% filter(Compound %in% "MBOA") %>% dplyr::select(max_conc) 
+
+MBOA_max_NBC <- MBOA_max_NBC$max_conc
+MBOA_max_70 <- (MBOA_max_NBC/100) * 70
+MBOA_max_10 <- (MBOA_max_NBC/100) * 10
+MBOA_max_10_plus <- MBOA_max_NBC+MBOA_max_10
+MBOA_max_10_minus <- MBOA_max_NBC-MBOA_max_10
+
+# AMPO measured
+AMPO_max <- met_combo_MBOA_max %>% filter(Compound %in% "AMPO") %>% dplyr::select(max_conc) 
+
+AMPO_max <- AMPO_max$max_conc
+AMPO_10 <- (AMPO_max/100) * 10
+AMPO_0.1 <- (AMPO_max/100) * 0.1
+
+# AAMPO measured
+AAMPO_max <- met_combo_MBOA_max %>% filter(Compound %in% "AAMPO") %>% dplyr::select(max_conc) 
+
+AAMPO_max <- AAMPO_max$max_conc
+AAMPO_10 <- (AAMPO_max/100) * 10
+AAMPO_0.1 <- (AAMPO_max/100) * 0.1
+
+# HMPAA measured
+HMPAA_max <- met_combo_MBOA_max %>% filter(Compound %in% "HMPAA") %>% dplyr::select(max_conc) 
+
+HMPAA_max <- HMPAA_max$max_conc
+HMPAA_10 <- (HMPAA_max/100) * 10
+HMPAA_0.1 <- (HMPAA_max/100) * 0.1
+
+# Matrix
+met_matrix_MBOA <- met %>% filter(Strain_exp %in% c("LBA21_d", "LMN1_d", "LMX9231_d", "LMX9_d", "LMG1_d", "LST17_d", "LMB2_d", "metSC_d", "NBC_d")) %>% 
+        filter(Treatment %in% "MBOA") %>% 
+        dplyr::select(Strain, Compound, uMol) %>% 
+        mutate(uMol = replace_na(uMol, 0)) %>% 
+        mutate(uMol = as.numeric(uMol)) %>% 
+        filter(Compound %in% c("MBOA", "HMPAA", "AMPO", "AAMPO")) %>% 
+        pivot_wider(names_from = Compound, values_from = uMol) %>%  
+        relocate(MBOA, .before = AAMPO) %>% 
+        relocate(AAMPO, .after = AMPO) %>% 
+        mutate(MBOA = as.numeric(MBOA)) %>% 
+        mutate(MBOA_cat = dplyr::case_when(MBOA > MBOA_max_70 ~ "no", 
+                                           between(MBOA, MBOA_max_10, MBOA_max_70) ~ "weak degradation",
+                                           MBOA < MBOA_max_10 ~ "strong degradation")) %>% 
+        mutate(AMPO_cat = dplyr::case_when(AMPO < AMPO_0.1 ~ "no", 
+                                           between(AMPO, AMPO_0.1, AMPO_10) ~ "weak AMPO formation",
+                                           AMPO > AMPO_10 ~ "strong AMPO formation")) %>% 
+        mutate(AAMPO_cat = dplyr::case_when(AAMPO < AAMPO_0.1 ~ "no", 
+                                           between(AAMPO, AAMPO_0.1, AAMPO_10) ~ "weak AAMPO formation",
+                                           AAMPO > AAMPO_10 ~ "strong AAMPO formation")) %>% 
+        mutate(HMPAA_cat = dplyr::case_when(HMPAA < HMPAA_0.1 ~ "no", 
+                                           # between(HMPAA, HMPAA_0.1, HMPAA_10) ~ "weak HMPAA formation",
+                                           HMPAA > HMPAA_10 ~ "strong HMPAA formation")) 
+
+met_matrix_MBOA %>% mutate(Strain = as.factor(Strain)) %>% 
+        mutate(Strain = factor(Strain, levels = c("metSC", "LST17", "LMX9231", "LMX9",  "LMN1", "LMG1", "LBA21", "LMB2", "NBC"))) %>% 
+        as.data.frame()
+
+met_matrix_MBOA_cat <- met_matrix_MBOA %>% dplyr::select(Strain, MBOA_cat, AMPO_cat, AAMPO_cat, HMPAA_cat)
+
+met_matrix_MBOA_num <- met_matrix_MBOA %>% mutate(MBOA_cat = gsub("no", 2, MBOA_cat),
+                           MBOA_cat = gsub("weak degradation", 1, MBOA_cat),
+                           MBOA_cat = gsub("strong degradation", 0, MBOA_cat)) %>% 
+                    mutate(AMPO_cat = gsub("no", 0, AMPO_cat),
+                           AMPO_cat = gsub("weak AMPO formation", 3, AMPO_cat),
+                           AMPO_cat = gsub("strong AMPO formation", 4, AMPO_cat)) %>% 
+                    mutate(AAMPO_cat = gsub("no", 0, AAMPO_cat),
+                           AAMPO_cat = gsub("weak AAMPO formation", 3, AAMPO_cat),
+                           AAMPO_cat = gsub("strong AAMPO formation", 4, AAMPO_cat)) %>% 
+                    mutate(HMPAA_cat = gsub("no", 0, HMPAA_cat),
+                           HMPAA_cat = gsub("weak HMPAA formation", 5, HMPAA_cat),
+                           HMPAA_cat = gsub("strong HMPAA formation", 6, HMPAA_cat)) %>%
+        mutate(MBOA_cat = as.numeric(MBOA_cat)) %>% 
+        mutate(AMPO_cat = as.numeric(AMPO_cat)) %>% 
+        mutate(AAMPO_cat = as.numeric(AAMPO_cat)) %>% 
+        mutate(HMPAA_cat = as.numeric(HMPAA_cat)) %>% 
+        mutate(Strain_order = case_when(Strain == "NBC" ~ 1,
+                                        Strain == "LMB2"~ 2,
+                                        Strain == "LBA21"~ 3,
+                                        Strain == "LMG1"~ 4, 
+                                        Strain == "LMN1"~ 5,
+                                        Strain == "LMX9"~ 6,
+                                        Strain == "LMX9231"~ 7,
+                                        Strain == "LST17"~ 8,
+                                        Strain == "metSC" ~ 9)) %>%
+        dplyr::arrange((Strain_order)) %>% 
+        dplyr::select(Strain, MBOA_cat, AMPO_cat, AAMPO_cat, HMPAA_cat) %>% 
+        tibble::column_to_rownames("Strain") %>% 
+        as.matrix(.)
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(2,8)}
+dropout_pheatmap <- pheatmap(met_matrix_MBOA_num[,-3],
+         color = c("white", "#555CCB", "darkblue", "tomato1", "darkred", "orange", "gold2"),
+         na_col = "white", 
+         labels_row = c("NBC", "metSC - LMB2", "metSC - LBA21", "metSC - LMG1", "metSC - LMN1", "metSC - LMX9", 
+                        "metSC - LMX9231", "metSC - LST17", "metSC"),
+         labels_col = c("MBOA", "AMPO", "HMPAA"), 
+                              cellwidth = 10, 
+                              fontsize = 8, 
+                              cluster_cols = FALSE, 
+                              cluster_rows = FALSE,
+                              main = "dropout")
+
+dropout_pheatmap
+
+ggsave(plot = dropout_pheatmap, filename = "Fig_2_dropout_pheatmap.svg", path = "../../all_figures", width = 8.8, height = 9, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+met_pair_MBOA_max <- met %>% 
+  filter(Strain_exp %in% c("metSC_d", "LST17_c", "LMX9231_c", "LMX9_c", "LBA21_c", "LMN1_c", "LMG1_c", "LMB2_c", "NBC_d")) %>% 
+                            mutate(uMol = replace_na(uMol, 0)) %>% 
+                            filter(Treatment %in% "MBOA") %>% 
+                            group_by(Compound) %>% 
+                            dplyr::summarise(max_conc = max(uMol))
+# MBOA measured
+met_pair_MBOA_NBC <- met %>% 
+  mutate(uMol = replace_na(uMol, 0)) %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AAMPO", "AMPO")) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Strain_exp %in% c("NBC_d")) %>% 
+  group_by(Compound) %>% 
+  dplyr::summarise(max_conc = max(uMol))
+
+MBOA_max_NBC <- met_pair_MBOA_NBC %>% filter(Compound %in% "MBOA") %>% dplyr::select(max_conc) 
+
+MBOA_max_NBC <- MBOA_max_NBC$max_conc
+MBOA_max_70 <- (MBOA_max_NBC/100) * 70
+MBOA_max_10 <- (MBOA_max_NBC/100) * 10
+MBOA_max_10_plus <- MBOA_max_NBC+MBOA_max_10
+MBOA_max_10_minus <- MBOA_max_NBC-MBOA_max_10
+
+# AMPO measured
+AMPO_max <- met_pair_MBOA_max %>% filter(Compound %in% "AMPO") %>% dplyr::select(max_conc) 
+
+AMPO_max <- AMPO_max$max_conc
+AMPO_10 <- (AMPO_max/100) * 10
+AMPO_1 <- (AMPO_max/100) * 1
+
+# AAMPO measured
+AAMPO_max <- met_combo_MBOA_max %>% filter(Compound %in% "AAMPO") %>% dplyr::select(max_conc) 
+
+AAMPO_max <- AAMPO_max$max_conc
+AAMPO_10 <- (AAMPO_max/100) * 10
+AAMPO_1 <- (AAMPO_max/100) * 1
+
+# HMPAA measured
+# HMPAA_max <- met_combo_MBOA_max %>% filter(Compound %in% "HMPAA") %>% dplyr::select(max_conc) 
+# 
+# HMPAA_max <- HMPAA_max$max_conc
+# HMPAA_10 <- (HMPAA_max/100) * 10
+# HMPAA_1 <- (HMPAA_max/100) * 1
+
+# Matrix
+met_matrix_MBOA_pair <- met %>% filter(Strain_exp %in% c("metSC_d", "LST17_c", "LMX9231_c", "LMX9_c", "LBA21_c", "LMN1_c", "LMG1_c", "LMB2_c", "NBC_d")) %>% 
+        filter(Treatment %in% "MBOA") %>% 
+        dplyr::select(Strain, Compound, uMol) %>% 
+        mutate(uMol = replace_na(uMol, 0)) %>% 
+        mutate(uMol = as.numeric(uMol)) %>% 
+        filter(Compound %in% c("MBOA", "HMPAA", "AMPO", "AAMPO")) %>%
+        pivot_wider(names_from = Compound, values_from = uMol) %>%  
+        relocate(MBOA, .before = AAMPO) %>% 
+        relocate(AAMPO, .after = AMPO) %>% 
+        as.data.frame() %>%
+        mutate(MBOA = as.numeric(MBOA)) %>% 
+        mutate(Strain = factor(Strain, levels = c("metSC", "LST17", "LMX9231", "LMX9",  "LMN1", "LMG1", "LBA21", "LMB2", "NBC"))) %>% 
+        mutate(MBOA_cat = dplyr::case_when(MBOA > MBOA_max_70 ~ "no", 
+                                           between(MBOA, MBOA_max_10, MBOA_max_70) ~ "weak degradation",
+                                           MBOA < MBOA_max_10 ~ "strong degradation")) %>% 
+        mutate(AMPO_cat = dplyr::case_when(AMPO < AMPO_1 ~ "no", 
+                                           between(AMPO, AMPO_1, AMPO_10) ~ "weak AMPO formation",
+                                           AMPO > AMPO_10 ~ "strong AMPO formation")) %>% 
+        mutate(AAMPO_cat = dplyr::case_when(AAMPO < AAMPO_1 ~ "no", 
+                                           between(AAMPO, AAMPO_1, AAMPO_10) ~ "weak AAMPO formation",
+                                           AAMPO > AAMPO_10 ~ "strong AAMPO formation")) %>% 
+        mutate(HMPAA_cat = dplyr::case_when(HMPAA < HMPAA_10 ~ "no", 
+                                           # between(HMPAA, HMPAA_1, HMPAA_10) ~ "weak HMPAA formation",
+                                           HMPAA > AMPO_10 ~ "strong HMPAA formation"))
+
+met_matrix_MBOA_pair_cat <- met_matrix_MBOA_pair %>% dplyr::select(Strain, MBOA_cat, AMPO_cat, AAMPO_cat, HMPAA_cat)
+
+met_matrix_MBOA_pair_num <- met_matrix_MBOA_pair %>% mutate(MBOA_cat = gsub("no", 2, MBOA_cat),
+                           MBOA_cat = gsub("weak degradation", 1, MBOA_cat),
+                           MBOA_cat = gsub("strong degradation", 0, MBOA_cat)) %>% 
+                    mutate(AMPO_cat = gsub("no", 0, AMPO_cat),
+                           AMPO_cat = gsub("weak AMPO formation", 3, AMPO_cat),
+                           AMPO_cat = gsub("strong AMPO formation", 4, AMPO_cat)) %>% 
+                    mutate(AAMPO_cat = gsub("no", 0, AAMPO_cat),
+                           AAMPO_cat = gsub("weak AAMPO formation", 3, AAMPO_cat),
+                           AAMPO_cat = gsub("strong AAMPO formation", 4, AAMPO_cat)) %>% 
+                    mutate(HMPAA_cat = gsub("no", 0, HMPAA_cat),
+                           HMPAA_cat = gsub("weak HMPAA formation", 5, HMPAA_cat),
+                           HMPAA_cat = gsub("strong HMPAA formation", 6, HMPAA_cat)) %>%
+        mutate(MBOA_cat = as.numeric(MBOA_cat)) %>% 
+        mutate(AMPO_cat = as.numeric(AMPO_cat)) %>% 
+        mutate(AAMPO_cat = as.numeric(AAMPO_cat)) %>% 
+        mutate(HMPAA_cat = as.numeric(HMPAA_cat)) %>% 
+         mutate(Strain_order = case_when(Strain == "NBC" ~ 1,
+                                        Strain == "LMB2"~ 2,
+                                        Strain == "LBA21"~ 3,
+                                        Strain == "LMG1"~ 4, 
+                                        Strain == "LMN1"~ 5,
+                                        Strain == "LMX9"~ 6,
+                                        Strain == "LMX9231"~ 7,
+                                        Strain == "LST17"~ 8,
+                                        Strain == "metSC" ~ 9)) %>%
+        dplyr::arrange((Strain_order)) %>% 
+        dplyr::select(Strain, MBOA_cat, AMPO_cat, AAMPO_cat, HMPAA_cat) %>% 
+        dplyr::select(Strain, MBOA_cat, AMPO_cat, AAMPO_cat, HMPAA_cat) %>% 
+        as_tibble() %>% 
+        tibble::column_to_rownames("Strain") %>% 
+        as.matrix(.)
+```
+
+```{r,  message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(2, 8)}
+pairs_pheatmap <- pheatmap(met_matrix_MBOA_pair_num[,-3],
+         color = c("white", "#555CCB", "darkblue", "tomato1", "darkred", "orange", "gold2"),
+         labels_row = c("metSC", "LST17 + LMB2", "LMX9231 + LMB2", "LMX9 + LMB2", "LMN1 + LMB2", "LMG1 + LMB2", "LBA21 + LMB2", "LMB2", "NBC"),
+         labels_col = c("MBOA", "AMPO", "HMPAA"), 
+                              cellwidth = 10, 
+                              fontsize = 8, 
+                              cluster_cols = FALSE, 
+                              cluster_rows = FALSE,
+                              main = "pairs")
+
+pairs_pheatmap
+
+ggsave(plot = pairs_pheatmap, filename = "Fig_2_pairs_pheatmap.svg", path = "../../all_figures", width = 8.8, height = 9, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+SC_red_MBOA_met <- met %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AMPO")) %>% 
+  mutate(Compound = factor(Compound, levels = c("MBOA", "HMPAA", "AMPO"))) %>% 
+  filter(Treatment %in% "MBOA") %>% 
+  filter(Strain_exp %in% c("metSC_d", "SC3_d", "NBC_d")) %>% 
+  mutate(Strain = factor(Strain, levels = c("metSC", "SC3", "NBC"))) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  filter(experiment !="NA") %>% 
+  ggplot(aes(x = as.factor(Strain), y = uMol)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = c("darkblue", "darkred", "gold2")) +
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  # facet_wrap(~experiment) + 
+  labs(title = "SynComs", 
+       x = "",
+       fill = " ")
+
+SC_red_MBOA_met
+
+# ggsave(plot = SC_red_MBOA_met, filename = "SC_red_MBOA_met.pdf", width = 6.6, height = 6, dpi = 300, scale = 1, units = "cm")
+# 
+# ggsave(plot = SC_red_MBOA_met, filename = "SC_red_MBOA_met.svg",  width = 6.6, height = 6, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(8,8)}
+LMB2_red_MBOA_met <- met %>% 
+  as.data.frame() %>% 
+  filter(Compound %in% c("MBOA", "HMPAA", "AAMPO", "AMPO")) %>% 
+  filter(Strain %in% "LMB2") %>% 
+  filter(experiment %in% "combo") %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  filter(experiment !="NA") %>% 
+  ggplot(aes(x = as.factor(Strain), y = uMol)) +
+  geom_bar(aes(fill = Compound), stat = "identity", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = c("firebrick1", "darkred", "gold2", "darkblue")) +
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  labs(title = "LMB2", 
+       x = "",
+       fill = " ")
+
+LMB2_red_MBOA_met
+
+# ggsave(plot = LMB2_red_MBOA_met, filename = "SC_red_MBOA_met.pdf", width = 6.6, height = 6, dpi = 300, scale = 1, units = "cm")
+# 
+# ggsave(plot = LMB2_red_MBOA_met, filename = "SC_red_MBOA_met.svg",  width = 6.6, height = 6, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r}
+sessionInfo()
+```
+
+

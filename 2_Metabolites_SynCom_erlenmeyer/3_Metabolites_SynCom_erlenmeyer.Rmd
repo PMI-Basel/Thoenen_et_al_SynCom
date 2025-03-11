@@ -1,0 +1,264 @@
+---
+title: "SynCom metabolites big cultures"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+rm(list=ls())
+```
+
+```{r,include=FALSE}
+# install.packages("dplyr") 
+# install.packages("magrittr") # for the %>% function
+# install.packages("ggplot2") # plots
+# install.packages("readxl") # to read excels
+# install.packages("stringr")
+# install.packages("MESS") # for auc function
+# install.packages("purrr")
+# install.packages("multcomp")
+# install.packages("emmeans")
+# install.packages("ggpubr")
+# install.packages("forcats")
+# install.packages("readr")
+# install.packages("ggpmisc")
+# install.packages("pander")
+```
+
+```{r,include=FALSE}
+library("dplyr")
+library("magrittr")
+library("ggplot2")
+library("readxl")
+library("tidyr")
+library("readr")
+library("stringr")
+library("MESS") 
+library("purrr")
+library("multcomp")
+library("emmeans")
+library("ggpubr")
+library("forcats")
+library("readr")
+library("ggpmisc")
+library("pander")
+```
+
+```{r, include=FALSE}
+met <- read_excel("./Input/3_SynCom_erlen_met_data.xlsx", sheet = 2)
+# met %>% colnames()
+met$Strain <- met$Treatment
+met$Strain <- gsub("NAm", "no", met$Strain)
+met$Strain <- gsub("NDm", "no", met$Strain)
+met$Strain <- gsub("NHg", "no", met$Strain)
+met$Strain <- gsub("NLw", "no", met$Strain)
+
+met$Strain <- gsub("SAm", "S", met$Strain)
+met$Strain <- gsub("SDm", "S", met$Strain)
+met$Strain <- gsub("SHg", "S", met$Strain)
+met$Strain <- gsub("SLg", "S", met$Strain)
+
+met$Strain <- gsub("RDm", "R", met$Strain)
+met$Strain <- gsub("RHg", "R", met$Strain)
+met$Strain <- gsub("RLw", "R", met$Strain)
+
+met$Treatment <- gsub("NAm", "AMPO", met$Treatment)
+met$Treatment <- gsub("NDm", "DMSO", met$Treatment)
+met$Treatment <- gsub("NHg", "MBOA_high", met$Treatment)
+met$Treatment <- gsub("NLw", "MBOA_low", met$Treatment)
+
+met$Treatment <- gsub("SAm", "AMPO", met$Treatment)
+met$Treatment <- gsub("SDm", "DMSO", met$Treatment)
+met$Treatment <- gsub("SHg", "MBOA_high", met$Treatment)
+met$Treatment <- gsub("SLg", "MBOA_low", met$Treatment)
+
+met$Treatment <- gsub("RDm", "DMSO", met$Treatment)
+met$Treatment <- gsub("RHg", "MBOA_high", met$Treatment)
+met$Treatment <- gsub("RLw", "MBOA_low", met$Treatment)
+```
+
+```{r, include=FALSE}
+mol <- read_excel("./Input/Molecular_weight_BXDs.xlsx")
+```
+
+```{r, include=FALSE}
+met <- left_join(met, mol, by = "Compound" )
+```
+
+Benzoxazinoids are quantified using a standard curve. 
+
+```{r, include=FALSE}
+met_Std <- met %>% 
+  # mutate(Type = as.factor(Type)) %>% 
+  filter(Type %in% "Standard") %>% 
+  # filter(Std_concentration != "0") %>% 
+  dplyr::select(Std_concentration, Area, Compound)
+```
+
+```{r, include=FALSE}
+met_Zero <- met %>% 
+  filter(Type %in% "Zero") %>% 
+  filter(Std_concentration %in% "0") %>% 
+  dplyr::select(Std_concentration, Area, Compound)
+```
+
+```{r, include=FALSE}
+met_Std <- rbind(met_Std, met_Zero)
+```
+
+```{r, include=FALSE}
+met_Std %>% 
+  mutate(Std_concentration = as.numeric(Std_concentration)) %>% 
+  mutate(Area = as.numeric(Area)) %>% 
+  ggplot(aes(x= Std_concentration, y = Area)) + 
+  geom_point(aes(colour = Compound), show.legend = FALSE) +
+  geom_smooth(method = "lm", color="black", formula = y ~ 0 + x) +
+  stat_poly_eq(formula = y ~ 0 + x,
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+                parse = TRUE, label.y.npc = "top", label.x.npc = "left") +
+  facet_wrap(~Compound, scales = "free") 
+```
+
+```{r, warning=F, echo=F, message=F}
+St_slopes <- met_Std %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  mutate(Std_concentration = as.numeric(Std_concentration)) %>%
+  group_by(Compound) %>% 
+  do(lm(Area ~ 0 + Std_concentration,  data = .) %>%  coef() %>%   as.data.frame() %>% slice(1))
+```
+
+```{r, include=FALSE}
+colnames(St_slopes) <- c("Compound", "Slope")
+```
+
+```{r, include=FALSE}
+# Dilution calculation 
+
+met$Sample_name <- gsub("20200609_TZ_LT_BacMet_", "", met$Sample_name)
+met %<>% filter(Type %in% "Analyte")
+met %<>% mutate(M = as.numeric(M))
+met %<>% mutate(Dilution = as.numeric(Dilution))
+```
+
+```{r, include=FALSE}
+met %<>% mutate(Dilution = as.numeric(Dilution))
+met %<>% mutate(Area = as.numeric(Area))
+met %<>% as.data.frame()
+```
+
+```{r, include=FALSE}
+met$Strain <- factor(met$Strain, levels = c("S", "R", "no"))
+
+met$Treatment <- factor(met$Treatment, levels = c("DMSO", "MBOA_low", "MBOA_high", "AMPO"))
+```
+
+```{r, include=FALSE}
+met <- left_join(met, St_slopes, by = "Compound")
+```
+
+```{r, include=FALSE}
+met$Area_sample <- (met$Area / met$Dilution)
+met$ng_sample <- met$Area_sample / met$Slope 
+met$uMol <- (met$ng_sample) / met$M
+met$ng <- met$Area / met$Slope 
+```
+
+```{r, include=FALSE}
+met$cols <- as.character(met$Compound)
+met[met$Compound == "AMPO", ]$cols <- "darkred"
+met[met$Compound == "AAMPO", ]$cols <- "firebrick1"
+met[met$Compound == "MHPA", ]$cols <- "gold2"
+met[met$Compound == "MBOA", ]$cols <- "darkblue"
+
+temp <- data.frame(met$Compound, met$cols)
+temp <- plyr::ddply(temp, .variables="met.Compound", .fun=unique)   #library(plyr)
+level_cols_Compound <- as.character(temp[,2])
+names(level_cols_Compound) <- temp[,1]
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(7,4)}
+met %>% 
+  mutate(Compound = as.factor(Compound)) %>% 
+  filter(Compound %in% c("AMPO", "MBOA", "AAMPO", "MHPA")) %>%
+  filter(Strain %in% c("S","R", "no")) %>% 
+  ggplot(aes(x = interaction(Strain, Treatment), y = Area_sample)) +
+  geom_bar(aes(fill = Strain), stat = "summary", position= "dodge", fun.y = mean,  show.legend = TRUE) +
+  geom_errorbar(stat = "summary", position= "dodge", width=0.25) +
+  facet_wrap(~ Compound, nrow = 1, scales = "fixed") +
+  scale_fill_manual(values = c("darkred", "cornflowerblue",  "darkblue", "darkorange3", "grey"))+
+  theme_bw() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  labs(title = "Erlenmeyer", x = "", y = "Area")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(7,4)}
+Treatment.labs <- c("DMSO", "MBOA low", "MBOA high")
+names(Treatment.labs) <- c("DMSO", "MBOA_low", "MBOA_high")
+
+met_erlenemyer <- met %>% 
+  mutate(Strain = gsub("S", "SCS", Strain)) %>% 
+  mutate(Strain = gsub("R", "SCR", Strain)) %>% 
+  filter(!Treatment %in% "AMPO") %>% 
+  filter(Compound %in% c("MBOA", "AAMPO", "AMPO")) %>% 
+  ggplot(aes(x = Strain, y = uMol, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat="identity", position="stack", size = 2, show.legend = TRUE) +
+  facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
+  scale_fill_manual(values = c("firebrick1", "darkred", "darkblue")) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.5)))+
+  labs(title = " ",
+       x = "",
+       y = "concentration [µMol]")
+
+met_erlenemyer
+
+# ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.pdf",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+# 
+# ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.svg", width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(7,4)}
+Treatment.labs <- c("DMSO", "MBOA low", "MBOA high")
+names(Treatment.labs) <- c("DMSO", "MBOA_low", "MBOA_high")
+
+met_area_erlenemyer <- met %>% 
+  mutate(Strain = gsub("S", "SCS", Strain)) %>% 
+  mutate(Strain = gsub("R", "SCR", Strain)) %>% 
+  filter(!Treatment %in% "AMPO") %>% 
+  ggplot(aes(x = Strain, y = Area_sample, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat="identity", position="stack", size = 2, show.legend = TRUE) +
+  facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
+  scale_fill_manual(values = c("firebrick1", "darkred", "darkblue", "gold2"), labels = c("AAMPO", "AMPO", "MBOA", "HMPAA")) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.5)))+
+  labs(title = " ",
+       x = "",
+       y = "concentration [Area]")
+
+met_area_erlenemyer
+
+# ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.pdf",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+# 
+# ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.svg", width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r}
+sessionInfo()
+```
+
+
