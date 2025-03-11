@@ -1,2 +1,0 @@
-# Thoenen_et_al_SynCom
-Thoenen_et_al_SynCom
