@@ -1,0 +1,1122 @@
+---
+title: "Community composition SynCom"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+
+---
+
+
+# Background
+
+We assembled synthetic bacterial communities (SynCom)  from maize root bacteria and grew them with MBOA. At the end of the experiment, we sequenced the communities with amplicon sequencing. The raw data were processed with the DADA2 pipeline. Below we analyse the composition of the SynComs, both on community level and on strain level by mapping the isolates to the ASVs.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+rm(list=ls())
+```
+
+```{r install packages, warning=F, message=F, echo=F, tidy=T}
+## libraries
+# install.packages("tidyverse")
+# install.packages("magrittr")
+# install.packages("sciplot")
+# install.packages("coin")
+# install.packages("vegan")
+# install.packages("phyloseq")
+# install.packages("edgeR")
+# install.packages("ggplot2")
+# install.packages("plyr")
+# install.packages("pander")
+# install.packages("multcomp")
+# install.packages("emmeans")
+# install.packages("knitr")
+# install.packages("ggpubr")
+# install.packages("RVAideMemoire")
+# install.packages("DescTools")
+# install.packages("ape")
+# install.packages("magrittr")
+# install.packages("data.table")
+# install.packages("rstatix")
+# install.packages("seqRFLP")
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#      install.packages("BiocManager")
+# BiocManager::install("phyloseq")
+# 
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("edgeR")
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("GenomeInfoDb")
+
+## functions
+# source("./functions/vennDia.R") 
+# source("./functions/staxlab.R")
+# source("./functions/error.bar.R")
+# source("./functions/variability_table.R")
+```
+
+
+```{r load packages, warning=F, message=F, echo=F, tidy=T}
+## libraries
+library(tidyverse)
+library(magrittr)
+library(sciplot)
+library(coin)
+library(vegan)
+library(phyloseq)
+library(edgeR)
+library(ggplot2)
+library(plyr)
+library(pander)
+library(multcomp)
+library(emmeans)
+# library(knitr)
+library(ggpubr)
+# library(VennDiagram)
+# library(tinytex)
+# install.packages("RVAideMemoire")
+library(RVAideMemoire)
+# install.packages("DescTools")
+library(DescTools)
+library(ape)
+library(magrittr)
+library(data.table)
+library(rstatix)
+# library("seqRFLP")
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#      install.packages("BiocManager")
+# BiocManager::install("phyloseq")
+# library(phyloseq)
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("edgeR")
+# library(edgeR)
+
+# install.packages("seqRFLP")
+# library("seqRFLP")
+
+## functions
+source("./functions/vennDia.R") 
+source("./functions/staxlab.R")
+source("./functions/error.bar.R")
+source("./functions/variability_table.R")
+```
+
+# Properties SynCom isolates scheme
+```{r, warning=F, echo=F, tidy=T, message=F}
+SynCom_isolates <- 
+  data.frame(c("LBA21", 
+             "LMN1", 
+             "LMX9231", 
+             "LMX9", 
+             "LMG1", 
+             "LST17", 
+             "LMI1x", 
+             "LMB2"), 
+           c("Bacillus", 
+             "Chitinophaga",
+             "Enterobacter",
+             "Pseudomonas", 
+             "Streptomyces",
+             "Stenotrophomonas",
+             "Microbacterium",
+             "Microbacterium"),
+           c("no",
+             "no",
+             "weak",
+             "no",
+             "no",
+             "no",
+             "no",
+             "strong"),
+           c("intermediate",
+             "susceptible",
+             "intermediate",
+             "intermediate",
+             "susceptible",
+             "susceptible",
+             "tolerant",
+             "intermediate"),
+           c("x", "x", "x", "x", "x", "x", "x", "0"),
+           c("x", "x", "x", "x", "x", "x", "0", "x"))
+
+colnames(SynCom_isolates) <- c("strain", 
+                               "genus", 
+                               "MBOA_metabolisation", 
+                               "MBOA_tolerance", 
+                               "nonSC",
+                               "metSC") 
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+SynCom_isolates_qual <- 
+  data.frame(c("LBA21", 
+             "LMN1", 
+             "LMX9231", 
+             "LMX9", 
+             "LMG1", 
+             "LST17", 
+             "LMI1x", 
+             "LMB2"), 
+           c("Bacillus", 
+             "Chitinophaga",
+             "Enterobacter",
+             "Pseudomonas", 
+             "Streptomyces",
+             "Stenotrophomonas",
+             "Microbacterium",
+             "Microbacterium"),
+           c("no",
+             "no",
+             "weak",
+             "no",
+             "no",
+             "no",
+             "no",
+             "strong"),
+           c("intermediate",
+             "weak",
+             "intermediate",
+             "intermediate",
+             "weak",
+             "weak",
+             "strong",
+             "intermediate"),
+           c("x", "x", "x", "x", "x", "x", "x", "0"),
+           c("x", "x", "x", "x", "x", "x", "0", "x"))
+
+colnames(SynCom_isolates_qual) <- c("strain", 
+                               "genus", 
+                               "MBOA_metabolisation", 
+                               "MBOA_tolerance", 
+                               "nonSC",
+                               "metSC") 
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+SynCom_isolates_qual %<>% 
+  mutate(col_strain = case_when(strain %in% "LBA21" ~ "#cab2d6",
+                                strain %in% "LMN1" ~ "#1f78b4",
+                                strain %in% "LMX9231" ~ "#a6cee3",
+                                strain %in% "LMX9" ~ "#33a02c",
+                                strain %in% "LST17" ~ "#b2df8a",
+                                strain %in% "LMG1" ~ "#6a3d9a",
+                                strain %in% "LMI1x" ~ "#fdbf6f",
+                                strain %in% "LMB2" ~ "#e31a1c"))
+
+temp <- data.frame(SynCom_isolates_qual$strain, SynCom_isolates_qual$col_strain)
+temp <- plyr::ddply(temp, .variables="SynCom_isolates_qual.strain", .fun=unique)   #library(plyr)
+level_cols_strain <- as.character(temp[,2])
+names(level_cols_strain) <- temp[,1]
+
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+SynCom_isolates <- SynCom_isolates_qual %>% 
+  mutate(MBOA_metabolisation = 
+    factor(MBOA_metabolisation, levels = c("no", "weak", "strong"))) %>% 
+  mutate(MBOA_tolerance = 
+    factor(MBOA_tolerance, levels = c("weak", "intermediate", "strong"))) %>% 
+  mutate(strain_genus = interaction(genus, strain)) %>% 
+  ggplot(aes(y = strain_genus)) +
+  geom_tile(aes(fill = strain, x = 1)) +
+  scale_fill_manual(values = level_cols_strain)+
+  geom_point(aes(shape = nonSC, x = 2)) +
+  geom_point(aes(shape  = metSC, x = 3)) +
+  scale_shape_manual(values = c(1, 3))+
+  geom_point(aes(colour = MBOA_tolerance, x = 5), size = 4)+
+  geom_point(aes(colour = MBOA_metabolisation, x = 4), size = 4)+
+  scale_colour_manual(values = c("grey80", "grey40", "black", "white"))+
+  scale_y_discrete(expand = expansion(mult = c(0, 0.1)))+
+  scale_x_discrete(expand = expansion(mult = c(0, 0.1)))+
+  theme_classic() +
+  labs(colour = "Phenotype", 
+       shape = "SynCom", 
+       y = "")
+
+SynCom_isolates
+
+ggsave(plot = SynCom_isolates, filename = "Fig_1_SynCom_isolates.svg", path = "../../all_figures", width=15, height=8, dpi = 300, scale = 1, units = "cm")
+
+ggsave(plot = SynCom_isolates, filename = "Fig_1_SynCom_isolates_legend.svg", path = "../../all_figures", width=15, height=15, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r - field, fig.height=3.5, fig.width=4.5, echo=F, tidy=T, include = F}
+# Load phyloseq object
+all_phy <- read_rds("./Input/phyloseq_object_INVSC_dada2.RDS")
+
+# Sample names phyloseq object
+sample_names(all_phy)
+
+nsamples(all_phy)
+# 96
+
+ntaxa(all_phy)
+# 15
+
+taxa_names(all_phy)
+```
+
+# Explore dataset
+
+*Tree*: Make a tree of the ASVs in the dataset to explore taxonomy
+
+```{r, fig.height=3.5, fig.width=4.5, echo=F, tidy=T, include=F}
+#########before runnging the below script, one has to run this function
+all_phy_random_tree <- ape::rtree(ntaxa(all_phy), rooted=TRUE, tip.label=taxa_names(all_phy)) ###First for unrooted tree
+
+# plot(all_phy_random_tree)
+
+######### most distinct sequence group would be the root
+
+pick_new_outgroup <- function(tree.unrooted){
+  require("magrittr")
+  require("data.table")
+  require("ape") # ape::Ntip
+  # tablify parts of tree that we need.
+  treeDT <- 
+    cbind(
+      data.table(tree.unrooted$edge),
+      data.table(length = tree.unrooted$edge.length)
+    )[1:Ntip(tree.unrooted)] %>% 
+    cbind(data.table(id = tree.unrooted$tip.label))
+  # Take the longest terminal branch as outgroup
+  new.outgroup <- treeDT[which.max(length)]$id
+  return(new.outgroup)
+}
+#########then make the rooted tree from the unrooted tree
+
+
+new.outgroup <- pick_new_outgroup(all_phy_random_tree)
+
+all_phy_rootedTree = ape::root(all_phy_random_tree, outgroup=new.outgroup, resolve.root=TRUE)
+
+plot(all_phy_rootedTree)
+
+
+#########Merge the created rooted tree
+
+all_phy2 <- merge_phyloseq(all_phy, all_phy_rootedTree)
+# all_phy2
+
+# phyloseq-class experiment-level object
+# otu_table()   OTU Table:         [ 15 taxa and 96 samples ]
+# sample_data() Sample Data:       [ 96 samples by 26 sample variables ]
+# tax_table()   Taxonomy Table:    [ 15 taxa by 7 taxonomic ranks ]
+# phy_tree()    Phylogenetic Tree: [ 15 tips and 14 internal nodes ]
+
+
+saveRDS(all_phy2, "./Output/all_phy2.RDS")
+all_phy2 <- readRDS("./Output/all_phy2.RDS")
+```
+
+*Taxonomy:* Explore taxonomy of the dataset
+
+```{r, fig.height=3.5, fig.width=4.5, echo=T, tidy=T, include = F}
+#############Remove the taxa without Phylum assignment (NA)
+
+table(tax_table(all_phy2)[, "Kingdom"], exclude = NULL)
+
+all_phy2_Pna <- subset_taxa(all_phy2, !is.na(Phylum) & !Phylum %in% c("", "uncharacterized"))
+
+table(tax_table(all_phy2_Pna)[, "Phylum"], exclude = NULL) %>% knitr::kable(col.names = c("Phylum", "Count"))
+
+saveRDS(all_phy2_Pna, "./Output/all_phy2_Pna.RDS")
+all_phy2_Pna <- readRDS("./Output/all_phy2_Pna.RDS")
+
+# all_phy2_Pna
+# otu_table()   OTU Table:         [ 15 taxa and 96 samples ]
+# sample_data() Sample Data:       [ 96 samples by 26 sample variables ]
+# tax_table()   Taxonomy Table:    [ 15 taxa by 7 taxonomic ranks ]
+# phy_tree()    Phylogenetic Tree: [ 15 tips and 14 internal nodes ]
+
+# 100*sum(colSums(otu_table(all_phy2_Pna))/sum(colSums(otu_table(all_phy2_Pna))))
+## [1] 100
+
+all_phy3 <- all_phy2_Pna
+
+saveRDS(all_phy3, "./Output/all_phy3.RDS")
+all_phy3 <- readRDS("./Output/all_phy3.RDS")
+```
+
+# Rarefaction
+Check the rarefaction of the data to get an insight into the sequencing depth. Create rarefaction curve.
+
+```{r, fig.height=3.5, fig.width=4.5, echo=F, tidy=T, warning=F, message = F}
+# Get the better idea of data 
+
+## Creating rarefaction curves to better visualze the data
+
+set.seed(100)
+
+calculate_rarefaction_curves <- function(all_phy3, measures, depths) {
+  require('plyr') # ldply
+  require('reshape2') # melt
+  
+  estimate_rarified_richness <- function(all_phy3, measures, depth) {
+    if(max(sample_sums(all_phy3)) < depth) return()
+    OH6 <- prune_samples(sample_sums(all_phy3) >= depth, all_phy3)
+    
+    rarified_psdata <- rarefy_even_depth(all_phy3, depth, verbose = FALSE)
+    
+    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
+    
+    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
+    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c('Sample', 'Measure'), value.name = 'Alpha_diversity')
+    
+    molten_alpha_diversity
+  }
+  
+  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
+  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, all_phy3 = all_phy3, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
+  
+  # convert Depth from factor to numeric
+  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
+  
+  rarefaction_curve_data
+}
+
+rarefaction_curve_data <- calculate_rarefaction_curves(all_phy3, c('Observed'), rep(c(100, 250, 500, 1000, 3000, 5000, 7000, 10000), each = 5))
+# summary(rarefaction_curve_data)
+
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'Sample', 'Measure'), summarise, Alpha_diversity_mean = mean(Alpha_diversity), Alpha_diversity_sd = sd(Alpha_diversity))
+
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(all_phy3)), by.x = 'Sample', by.y = 'row.names')
+
+# sample_names(all_phy3)
+#P9$Sample <- factor(P9$Sample, levels = c(positions))
+
+ggplot(
+  data = rarefaction_curve_data_summary_verbose,
+  mapping = aes(
+    x = Depth,
+    y = Alpha_diversity_mean,
+    ymin = Alpha_diversity_mean - Alpha_diversity_sd,
+    ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+    group = Sample
+  )
+) + geom_line(
+) + theme(legend.position="none"
+) + geom_text(aes(label=Sample),hjust=0, vjust=0, check_overlap = TRUE,
+) 
+```
+
+*Metadata*: Combine sequencing data with sample metadata
+
+```{r, warning=F, echo=F, tidy=T}
+# Sample list Gabriel
+sample_list <- readxl::read_excel("./Input/INVSC_Library_Prep_SampleList.xlsx")
+sample_list %<>% dplyr::select(`Sample ID`, `Sample type`, `PCR2, Barcode`)
+sample_list %<>% dplyr::rename(Sample_ID = `Sample ID`, 
+                       Sample_type = `Sample type`, 
+                       PCR2_Barcode =`PCR2, Barcode`)
+sample_list$Sample_ID <- gsub("RL3.21", "RL3", sample_list$Sample_ID)
+
+sample_list$Sample_ID <- gsub("SD4.2", "replace1", sample_list$Sample_ID)
+sample_list$Sample_ID <- gsub("SO4.2", "test2", sample_list$Sample_ID)
+
+sample_list$Sample_ID <- gsub("test2", "SD4.2", sample_list$Sample_ID)
+sample_list$Sample_ID <- gsub("replace1", "SO4.2", sample_list$Sample_ID)
+```
+
+```{r import design file, warning=F, echo=F, tidy=T}
+#Import the design file
+
+#read design file
+design <- readxl::read_excel("./Input/design.xlsx")
+design %<>% dplyr::select(-Barcode_ID, -Library)
+
+# ## experimental factors
+design %<>% 
+  mutate(SynCom = factor(SynCom,levels=c( "S", "R")),
+         Treatment = factor(Treatment, levels = c("no", "DMSO", "MBOA_low",
+                                                  "MBOA_high", "AMPO")),
+         inocula = interaction(groups, Type, sep = "_"),
+         groups = factor(groups, levels = c("S_DMSO", "R_DMSO", "S_MBOA_low",
+                                                      "R_MBOA_low", "S_MBOA_high",
+                                                      "R_MBOA_high", "S_AMPO", "S_no", 
+                                                      "R_no"))) %<>% 
+                                filter(!groups %in% c("R_AMPO"))
+
+design$cols <- as.character(design$groups)
+design[design$groups == "S_DMSO", ]$cols <- "#f2b468"
+design[design$groups == "R_DMSO", ]$cols <- "#ff9174"
+design[design$groups == "S_MBOA_low", ]$cols <- "#ff7f00"
+design[design$groups == "R_MBOA_low", ]$cols <- "#e31a1c"
+design[design$groups == "S_MBOA_high", ]$cols <- "#c55000"
+design[design$groups == "R_MBOA_high", ]$cols <- "#900000"
+design[design$groups == "S_AMPO", ]$cols <-  "#ff7f77"
+# design[design$groups == "R_AMPO", ]$cols <-  "#ac2f5a"
+design[design$groups == "S_no", ]$cols <-  "slategray4"
+design[design$groups == "R_no", ]$cols <-  "slategray2"
+
+temp <- data.frame(design$groups, design$cols)
+temp <- plyr::ddply(temp, .variables="design.groups", .fun=unique)   #library(plyr)
+level_cols_groups <- as.character(temp[,2])
+names(level_cols_groups) <- temp[,1]
+
+design_end <- design %>% filter(Type != "start")
+design_end$cols <- as.character(design_end$groups)
+design_end[design_end$groups == "S_DMSO", ]$cols <- "#ff840d"
+design_end[design_end$groups == "R_DMSO", ]$cols <- "#ffc692"
+design_end[design_end$groups == "S_MBOA_low", ]$cols <- "#9b5e4f"
+design_end[design_end$groups == "R_MBOA_low", ]$cols <- "#ce8c7c"
+design_end[design_end$groups == "S_MBOA_high", ]$cols <- "#464695"
+design_end[design_end$groups == "R_MBOA_high", ]$cols <- "#9279ae"
+design_end[design_end$groups == "S_AMPO", ]$cols <-  "#ff7f77"
+# design_end[design_end$groups == "R_AMPO", ]$cols <-  "#ac2f5a"
+
+temp <- data.frame(design_end$groups, design_end$cols)
+temp <- plyr::ddply(temp, .variables="design_end.groups", .fun=unique)   #library(plyr)
+level_cols_groups_end <- as.character(temp[,2])
+names(level_cols_groups_end) <- temp[,1]
+```
+
+*Formatting phyloseq object:* 
+- Remove samples from phyloseq
+- add info sample list to phlyoseq
+- change barcode names in design file to the same as in the phyloseq
+- merge design metadata to phyloseq
+
+```{r, warning=F, echo=F, tidy=T}
+# transform_sample_counts(all_phy, function(x) x / sum(x) )
+``` 
+
+```{r, warning=F, echo=F, tidy=T}
+# all_phy %>% sample_data()
+
+all_phy_sub = subset_samples(all_phy, !PCR2_Barcode %in% c("FLD0091", "FLD0092", "FLD0093", "FLD0094", "FLD0095", "FLD0096"))
+```
+
+```{r, warning=F, echo=F, tidy=T}
+design <- left_join(design, sample_list, by = "Sample_ID")
+design %<>% as.data.frame()
+design$PCR2_Barcode <- gsub("FLD00", "BE11_", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_01", "BE11_1", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_02", "BE11_2", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_03", "BE11_3", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_04", "BE11_4", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_05", "BE11_5", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_06", "BE11_6", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_07", "BE11_7", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_08", "BE11_8", design$PCR2_Barcode)
+design$PCR2_Barcode <- gsub("BE11_09", "BE11_9", design$PCR2_Barcode)
+```
+
+```{r, warning=F, echo=F, tidy=T}
+design %<>% arrange(., PCR2_Barcode)
+design %<>% dplyr::rename(PCR2_Barcode_design = PCR2_Barcode)
+rownames(design) <- design$PCR2_Barcode
+rownames(design) <- sample_names(all_phy_sub)
+
+design <- sample_data(design)
+all_phy_info <- merge_phyloseq(all_phy_sub, design)
+
+# to check if merging worked
+
+# head(sample_data(all_phy_sub))
+# head(sample_data(all_phy_info))
+# identical(all_phy_sub, all_phy_info)
+```
+
+```{r, warning=F, echo=F, tidy=T}
+### Data as PHYLOSEQ object
+PHYSEQ_melt_info <- psmelt(all_phy_info)
+```
+
+```{r, warning=F, echo=F, tidy=T}
+ASVsequences <- PHYSEQ_melt_info$OTU %>% unique()
+ASVsequences %<>% as.data.frame() 
+colnames(ASVsequences) <- "sequence"
+ASVsequences  %<>% mutate(ASV = (1:15)) %>% mutate(id = "ASV") %>% mutate(ASV_ID = interaction(id, ASV, sep = "_")) %>% dplyr::select(ASV_ID, sequence)
+```
+
+```{r, warning=F, echo=F, tidy=T}
+PHYSEQ_melt_info <- left_join(PHYSEQ_melt_info, ASVsequences, by = c("OTU" = "sequence"))
+```
+
+# Mapping isolates
+
+The 16s Sanger sequences from the isolates in the community were mapped to the ASVs. This was done using usearch with the following code: 
+
+```{r, include=F}
+# #!/bin/bash
+# 
+# #SBATCH --time=24:00:00
+# #SBATCH --mem=80g
+# #SBATCH --output=ASV.out
+# #SBATCH --error=ASV.error
+# #SBATCH --job-name=ASV_clustering
+# #SBATCH --cpus-per-task=16
+# #SBATCH --mail-user=jan.waelchli@students.unibe.ch
+# #SBATCH --mail-type=ALL
+# 
+# #load R module
+# module add R/3.5.1
+# 
+# #start scripts
+# taxa=$(awk '{print $2}' ../cmd/design.tab | uniq)
+# bacteria=$(echo $taxa | grep -c b)
+# fungi=$(echo $taxa | grep -c f)
+# if [ ${bacteria} = 1 ]; then ./bacteria_ASV_cluster.R; fi
+# if [ ${fungi} = 1 ]; then ./fungi_ASV_cluster.R; fi
+# 
+# 
+# ## mapping of strains to ZOTU representative sequences
+# usearch -usearch_global INVSC_member_16S.fasta -db ASVsequences.fasta -strand plus -id 0.97 -uc INVSC_member_16S_mapped_to_community_0.97.uc
+```
+
+```{r, warning=F, echo=F, tidy=T}
+mapping <- read.table("./Input/members_mapped_to_ASV_INVS_community_WGS.uc")
+
+mapping %<>% dplyr::rename(Strain = V9,
+                           ASV_ID = V10)
+# actually in the mapping with the 16s sanger sequences LMB2 maps to ASV_8, therefore we change that here manually
+
+mapping$Strain <- gsub("_WGS", "", mapping$Strain)
+
+mapping_LMB2 <- mapping %>% filter(Strain %in% "LMB2")
+mapping_LMB2$ASV_ID <- gsub("ASV_6", "ASV_8", mapping_LMB2$ASV_ID)
+
+mapping <- rbind(mapping, mapping_LMB2) %>% slice(-3)
+
+mapping_strain <- mapping %>% dplyr::select(Strain, ASV_ID)
+mapping_strain %<>% filter(Strain %in% c("LMI1x", "LMB2", "LMN1_part2", "LMX92", "LMG1", "LBA21", "LMX9", "LST17_part2")) %>% mutate(Strain = gsub("LMX92", "LMX9231", Strain))
+
+mapping_strain$Genus_isolate <- c("Microbacterium", "Chitinophaga", "Enterobacter", "Streptomyces", "Bacillus", "Pseudomonas", "Stenotrophomonas", "Microbacterium")
+
+mapping_strain$Strain <- gsub("_part2", "", mapping_strain$Strain)
+
+PHYSEQ_melt_info <- left_join(PHYSEQ_melt_info, mapping_strain, by = "ASV_ID")
+
+PHYSEQ_melt_info %<>% filter(!Treatment %in% "AMPO")
+
+PHYSEQ_melt_info %<>% 
+  mutate(ASV_ID = factor(ASV_ID, levels= c("ASV_1",
+                                           "ASV_2",
+                                           "ASV_3",
+                                           "ASV_4",
+                                           "ASV_5",
+                                           "ASV_6",
+                                           "ASV_7",
+                                           "ASV_8",
+                                           "ASV_9",
+                                           "ASV_10",
+                                           "ASV_11",
+                                           "ASV_12",
+                                           "ASV_13",
+                                           "ASV_14",
+                                           "ASV_15"))) 
+
+```
+
+```{r, warning=F, echo=F, tidy=T}
+cols_ASV <- c("#a6cee3",          "#1f78b4",
+                                  "#b2df8a",
+                                  "#33a02c",
+                                  "#fb9a99",
+                                  "#e31a1c",
+                                  "#fdbf6f",
+                                  "#ff7f00",
+                                  "#cab2d6",
+                                  "#6a3d9a",
+                                  "#ffff99",
+                                  "#b15928",
+                                  "#e6ab02",
+                                  "#a6761d",
+                                  "#666666",
+                                  "#e7298a", "black")
+```
+
+```{r, warning=F, echo=F, tidy=T}
+PHYSEQ_melt_info$cols <- as.character(PHYSEQ_melt_info$ASV_ID)
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_1", ]$cols <- "#a6cee3"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_2", ]$cols <- "#1f78b4"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_3", ]$cols <- "#b2df8a"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_4", ]$cols <- "#33a02c"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_5", ]$cols <- "#cab2d6"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_6", ]$cols <- "#fdbf6f" 
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_7", ]$cols <-  "#6a3d9a"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_8", ]$cols <-  "#e31a1c"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_9", ]$cols <-  "#fb9a99" 
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_10", ]$cols <- "#ff7f00"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_11", ]$cols <- "#ffff99"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_12", ]$cols <- "#b15928"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_13", ]$cols <-  "#e6ab02"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_14", ]$cols <-  "#a6761d"
+PHYSEQ_melt_info[PHYSEQ_melt_info$ASV_ID == "ASV_15", ]$cols <-  "#666666"
+
+temp <- data.frame(PHYSEQ_melt_info$ASV_ID, PHYSEQ_melt_info$cols)
+temp <- plyr::ddply(temp, .variables="PHYSEQ_melt_info.ASV_ID", .fun=unique)   #library(plyr)
+level_cols_ASV_ID <- as.character(temp[,2])
+names(level_cols_ASV_ID) <- temp[,1]
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+PHYSEQ_melt_info %<>% mutate(cols_strain = case_when(Strain %in% "LMX9231" ~ "#a6cee3",
+                                                    Strain == "LMN1" ~ "#1f78b4",
+                                                    Strain == "LST17" ~ "#b2df8a",
+                                                    Strain == "LMX9" ~ "#33a02c",
+                                                    Strain == "LBA21" ~ "#cab2d6",
+                                                    Strain == "LMI1x" ~ "#fdbf6f" ,
+                                                    Strain == "LMG1"~ "#6a3d9a",
+                                                    Strain == "LMB2"~ "#e31a1c"))
+
+
+temp <- data.frame(PHYSEQ_melt_info$Strain, PHYSEQ_melt_info$cols_strain)
+temp <- plyr::ddply(temp, .variables="PHYSEQ_melt_info.Strain", .fun=unique)   #library(plyr)
+level_cols_Strain <- as.character(temp[,2])
+names(level_cols_Strain) <- temp[,1]
+```
+
+
+*normalize abundance with 16s:* Since different bacteria have different amount of 16s rRNA gene copies, we normalize the ASV sequence counts for that. The 16s rRNA copies per strain were estimated from genome sequencing data. 
+
+```{r, warning=F, echo=F, tidy=T}
+PHYSEQ_melt_info %<>% mutate(copies_16s = Strain) %>% 
+  mutate(copies_16s = gsub("LMX9231", 8, copies_16s)) %>% 
+  mutate(copies_16s = gsub("LMN1", 1, copies_16s)) %>%  
+  mutate(copies_16s = gsub("LST17", 1, copies_16s)) %>%  
+  mutate(copies_16s = gsub("LMX9", 5, copies_16s)) %>% 
+  mutate(copies_16s = gsub("LBA21", 1, copies_16s)) %>% 
+  mutate(copies_16s = gsub("LMI1x", 3, copies_16s)) %>% 
+  mutate(copies_16s = gsub("LMG1", 3, copies_16s)) %>% 
+  mutate(copies_16s = gsub("LMB2", 3, copies_16s)) %>% 
+  mutate(copies_16s = as.numeric(copies_16s)) %>% 
+  mutate(Abundace_raw = Abundance) %>% 
+  mutate(Abundance = Abundace_raw / copies_16s)
+```
+
+```{r, warning=F, echo=F, tidy=T}
+design_end_MBOA <- design_end %>% filter(groups != "S_AMPO")
+design_end_MBOA$cols <- as.character(design_end_MBOA$groups)
+design_end_MBOA[design_end_MBOA$groups == "S_DMSO", ]$cols <- "#fdbf6f"
+design_end_MBOA[design_end_MBOA$groups == "R_DMSO", ]$cols <- "#ff9174"
+design_end_MBOA[design_end_MBOA$groups == "S_MBOA_low", ]$cols <- "#ff7f00"
+design_end_MBOA[design_end_MBOA$groups == "R_MBOA_low", ]$cols <- "#e31a1c"
+design_end_MBOA[design_end_MBOA$groups == "S_MBOA_high", ]$cols <- "#c55000"
+design_end_MBOA[design_end_MBOA$groups == "R_MBOA_high", ]$cols <- "#900000"
+
+temp <- data.frame(design_end_MBOA$groups, design_end_MBOA$cols)
+temp <- plyr::ddply(temp, .variables="design_end_MBOA.groups", .fun=unique)   #library(plyr)
+level_cols_groups_end_MBOA <- as.character(temp[,2])
+names(level_cols_groups_end_MBOA) <- temp[,1]
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+PHYSEQ_melt_info %<>% 
+  mutate(SynCom = gsub("S", "nonSC", SynCom)) %>% 
+  mutate(SynCom = gsub("R", "metSC", SynCom)) %>% 
+  mutate(SynCom = factor(SynCom, levels = c("nonSC", "metSC"))) %>% 
+  filter(!Treatment %in% c("AMPO")) %>% 
+  mutate(Treatment = gsub("MBOA_low", "MBOA 500 µM", Treatment)) %>% 
+  mutate(Treatment = gsub("MBOA_high", "MBOA 2500 µM", Treatment)) %>% 
+  mutate(Treatment = factor(Treatment, levels = c("DMSO", "MBOA 500 µM", "MBOA 2500 µM", "no"))) %>% 
+  mutate(groups = gsub("S_DMSO", "nonSC_DMSO", groups)) %>% 
+  mutate(groups = gsub("R_DMSO", "metSC_DMSO", groups)) %>% 
+  mutate(groups = gsub("S_MBOA_low", "nonSC_MBOA_500µM", groups)) %>% 
+  mutate(groups = gsub("R_MBOA_low", "metSC_MBOA_500µM", groups)) %>% 
+  mutate(groups = gsub("S_MBOA_high", "nonSC_MBOA_2500µM", groups)) %>% 
+  mutate(groups = gsub("R_MBOA_high", "metSC_MBOA_2500µM", groups)) %>% 
+  mutate(groups = gsub("S_no", "nonSC input", groups)) %>% 
+  mutate(groups = gsub("R_no", "metSC input", groups))
+ 
+```
+
+
+# Compsition in SynCom profiles 
+```{r, warning=F, echo=F, tidy=T, message=F}
+stacked_abundance_plot <- PHYSEQ_melt_info %>%
+  as.data.frame() %>% 
+  filter(!Treatment %in% "no") %>% 
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_3", "ASV_4", "ASV_1", "ASV_2", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  ggplot(aes(x = as.factor(Replicate), y = Abundance)) +
+  geom_bar(aes(fill = ASV_ID), stat="identity", position="fill") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0)))+
+  scale_fill_manual(values = level_cols_ASV_ID, labels = c( "LST17", "LMX9", "LMX9231", "LMN1", "LBA21", "LMG1", "LMI1x", "LMB2")) +
+  facet_grid(SynCom ~ Treatment) +
+  theme_classic() +
+  labs(fill = " ",
+       x = "Replicates",
+       y = "Abundance")
+
+stacked_abundance_plot
+
+ggsave(plot = stacked_abundance_plot, filename = "Fig4Cstacked_abundance_plot.svg", path = "../../all_figures",  
+       width = 17.6, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+input_stacked_abundance_plot <- PHYSEQ_melt_info %>%
+  filter(Treatment %in% "no") %>% 
+  as.data.frame() %>% 
+  filter(Type %in% c("start")) %>% 
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  # filter(!Treatment %in% NA) %>% 
+  # filter(!Strain %in% NA) %>% 
+  ggplot(aes(x = as.factor(Replicate), y = Abundance)) +
+  geom_bar(aes(fill = ASV_ID), stat="identity", position="fill") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0)))+
+  scale_fill_manual(values = level_cols_ASV_ID, labels = c("LMX9231", "LMN1", "LST17", "LMX9", "LBA21", "LMG1", "LMI1x", "LMB2")) +
+  facet_grid(SynCom ~ Treatment) +
+  theme_classic() +
+  labs(fill = " ",
+       x = "Replicates",
+       y = "Abundance")
+
+input_stacked_abundance_plot
+
+ggsave(plot = input_stacked_abundance_plot, filename = "FigS6B_input_stacked_abundance_plot.svg", path = "../../all_figures",  
+       width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+symnum.args <- list(cutpoints = c(0, 0.05, 1), symbols = c("*", "ns"))
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+PHYSEQ_melt_info_modified <- PHYSEQ_melt_info %>% group_by(Sample) %>% 
+  mutate(Abundance = replace_na(Abundance, 0)) %>% 
+  dplyr::summarize(Abundance_tot = sum(Abundance)) %>% 
+  left_join(PHYSEQ_melt_info, by = "Sample") %>% 
+  mutate(Abundance_norm = Abundance/Abundance_tot) %>% 
+  mutate(Abundance = replace_na(Abundance, 0)) %>% unique()
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+FigS6A_single_strain_abundance_plot <- PHYSEQ_melt_info_modified %>%
+  as.data.frame() %>% 
+  filter(!Treatment %in% "no") %>% 
+  mutate(groups = factor(groups, levels = c("nonSC_DMSO", "nonSC_MBOA_500µM", "nonSC_MBOA_2500µM", 
+                                            "metSC_DMSO", "metSC_MBOA_500µM", "metSC_MBOA_2500µM"))) %>%
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_3", "ASV_4", "ASV_1", "ASV_2", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  mutate(Strain = factor(Strain, levels = c( "LST17", "LMX9", "LMX9231", "LMN1", "LBA21", "LMG1", "LMB2", "LMI1x"))) %>% 
+  ggplot(aes(x = groups, y = Abundance_norm)) +
+  geom_bar(aes(fill = ASV_ID), stat="summary", show.legend = FALSE) +
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC_DMSO", label.y.npc = 1, hide.ns = TRUE, symnum.args = symnum.args) +
+  geom_errorbar(stat = "summary", width=0.2) +
+  ggbeeswarm::geom_quasirandom(aes(fill = ASV_ID), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE, size = 0.8)+
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.1)))+
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  scale_x_discrete(labels=c("nonSC DMSO", "nonSC MBOA 500µM", "nonSC MBOA 2500µM", 
+                            "metSC DMSO", "metSC MBOA 500µM", "metSC MBOA 2500µM"))+
+  facet_wrap(~ Strain, nrow = 2, scales = "free_y") +
+  scale_fill_manual(values = level_cols_ASV_ID) +
+  labs(fill = " ",
+       x = "",
+       y = "Relative abundance")
+
+FigS6A_single_strain_abundance_plot
+
+ggsave(plot = FigS6A_single_strain_abundance_plot, filename = "FigS6A_single_strain_abundance_plot.svg", path = "../../all_figures", width = 17.6, height = 12, 
+       dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+FigS6_single_strain_abundance_plot_input <- PHYSEQ_melt_info_modified %>%
+  as.data.frame() %>% 
+  # filter(!Treatment %in% "no") %>% 
+  mutate(groups = factor(groups, levels = c("nonSC input", "nonSC_DMSO", "nonSC_MBOA_500µM", "nonSC_MBOA_2500µM", 
+                                            "metSC input", "metSC_DMSO", "metSC_MBOA_500µM", "metSC_MBOA_2500µM"))) %>%
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_3", "ASV_4", "ASV_1", "ASV_2", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  mutate(Strain = factor(Strain, levels = c( "LST17", "LMX9", "LMX9231", "LMN1", "LBA21", "LMG1", "LMB2", "LMI1x"))) %>% 
+  ggplot(aes(x = groups, y = Abundance_norm)) +
+  geom_bar(aes(fill = ASV_ID), stat="summary", show.legend = FALSE) +
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC_DMSO", method.args = list(p.adjust.methods = "bonferroni"), label.y.npc = 0.95, hide.ns = TRUE, symnum.args = symnum.args) +
+  geom_errorbar(stat = "summary", width=0.2) +
+  ggbeeswarm::geom_quasirandom(aes(fill = ASV_ID), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE, size = 0.8 )+
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.1)))+
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  scale_x_discrete(labels=c("nonSC input", "nonSC DMSO", "nonSC MBOA 500µM", "nonSC MBOA 2500µM", 
+                                            "metSC input", "metSC DMSO", "metSC MBOA 500µM", "metSC MBOA 2500µM"))+
+  facet_wrap(~ Strain, nrow = 2, scales = "free_y") +
+  scale_fill_manual(values = level_cols_ASV_ID) +
+  labs(fill = " ",
+       x = "",
+       y = "Abundance")
+
+FigS6_single_strain_abundance_plot_input
+
+ggsave(plot = FigS6_single_strain_abundance_plot_input, filename = "FigS6_single_strain_abundance_plot_input.svg", path = "../../all_figures", width = 17.6, height = 12, 
+       dpi = 300, scale = 1, units = "cm")
+```
+
+Abundance single strains summary
+```{r, warning=F, echo=F, tidy=T, message=F}
+PHYSEQ_melt_info_modified %>%
+  as.data.frame() %>% 
+  # filter(!Treatment %in% "no") %>% 
+  mutate(groups = factor(groups, levels = c("nonSC input", "nonSC_DMSO", "nonSC_MBOA_500µM", "nonSC_MBOA_2500µM", 
+                                            "metSC input", "metSC_DMSO", "metSC_MBOA_500µM", "metSC_MBOA_2500µM"))) %>%
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_3", "ASV_4", "ASV_1", "ASV_2", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  mutate(Strain = factor(Strain, levels = c( "LST17", "LMX9", "LMX9231", "LMN1", "LBA21", "LMG1", "LMB2", "LMI1x"))) %>% 
+  group_by(groups, Strain) %>% 
+  dplyr::summarize(Abundance_norm = mean(Abundance_norm)) %>% 
+  arrange(Strain) %>% knitr::kable()
+```
+
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+Fig4_stacked_abundance_plot <- PHYSEQ_melt_info_modified %>%
+  as.data.frame() %>% 
+  filter(!Treatment %in% "no") %>% 
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>% 
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_3", "ASV_4", "ASV_1", "ASV_2", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>% 
+  ggplot(aes(x = as.factor(Replicate), y = Abundance_norm)) +
+  #geom_bar(aes(fill = ASV_ID), stat="identity", position="fill") +
+  geom_bar(aes(fill = ASV_ID), stat="identity") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0)))+
+  scale_fill_manual(values = level_cols_ASV_ID, labels = c( "LST17", "LMX9", "LMX9231", "LMN1", "LBA21", "LMG1", "LMI1x", "LMB2")) +
+  facet_grid(SynCom ~ Treatment) +
+  theme_classic() +
+  labs(fill = " ",
+       x = "Replicates",
+       y = "Abundance [%]")
+
+Fig4_stacked_abundance_plot
+
+ggsave(plot = Fig4_stacked_abundance_plot, filename = "Fig4stacked_abundance_plot.svg", path = "../../all_figures", width = 17.6, height = 12, 
+       dpi = 300, scale = 1, units = "cm")
+```
+
+
+# Composition ordination
+
+## unconstrained ordination
+
+SynComs and inocula in all treatments. Inocula differs strongly from the SynComs. SynCom composition is influenced by treatment, especially by high levels of MBOA.
+
+Both PcoA and CAP show that SynComs grown in high MBOA differ from SynComs grown in low MBOA or DMSO. Further SynCom S and R differ in MBOA high but not in the other treatments.  
+
+
+```{r, warning=F, echo=F, tidy=T}
+all_phy_info = subset_samples(all_phy_info, groups != "S_AMPO")
+all_phy_info_end = subset_samples(all_phy_info, Type %in% "end")
+```
+
+```{r, fig.height=5, fig.width=6.5, echo=F, tidy=T}
+all_PCoA_bray <- ordinate(all_phy_info, method="PCoA", distance="bray")
+all_samples_PcoA <- plot_ordination(all_phy_info, all_PCoA_bray, shape="Type", color="groups") + 
+      geom_point(size=3) + #, alpha=0.75) 
+      # geom_text(aes(label = Sample)) +
+      theme_bw() +
+      scale_color_manual(values=level_cols_groups, labels = c("SCS DMSO", "SCR DMSO", "SCS MBOA low", "SCR MBOA low", "SCS MBOA high", "SCR MBOA high", "SCS inocula", "SCR inocula" ))
+par(mar=c(4,4,4,4), oma=c(4,4,4,4))
+#png("fig3.png",width=3600, height=2800, res=600)
+print(all_samples_PcoA)
+```
+
+```{r, fig.height=5, fig.width=6.5, warning=F, echo=F, tidy=T}
+all_PCoA_bray_end_MBOA <- ordinate(all_phy_info_end, method="PCoA", distance="bray")
+ordination_end_MBOA <- plot_ordination(all_phy_info_end, all_PCoA_bray_end_MBOA, shape="SynCom", color="groups") + 
+      geom_point(size=3) + #, alpha=0.75) 
+      # geom_text(aes(label = Sample)) +
+      theme_bw() +
+      scale_color_manual(values= level_cols_groups_end_MBOA, labels = c("SCS DMSO", "SCR DMSO", "SCS MBOA low", "SCR MBOA low", "SCS MBOA high", "SCR MBOA high")) +
+      scale_shape_manual(values= c(16,17), labels = c("SCS", "SCR"))+
+      labs(color = "") 
+par(mar=c(4,4,4,4), oma=c(4,4,4,4))
+#png("fig3.png",width=3600, height=2800, res=600)
+ordination_end_MBOA
+#dev.off()
+
+# ggsave(plot = ordination_end_MBOA,  filename = "ordination_end_MBOA.pdf", width = 17.6, height = 12, dpi = 300, scale = 1, units = "cm")
+
+# ggsave(plot = ordination_end_MBOA,  filename = "ordination_end_MBOA.svg", width = 17.6, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, fig.height=5, fig.width=6.5, warning=F, message=F, echo=F, tidy=T}
+CAP_bray_end_MBOA <- ordinate(all_phy_info_end, method="CAP", SynCom~Treatment, distance="bray")
+
+# extract variation details
+source("functions/variability_table.R")
+CAP_end_MBOA_bray_var_tbl <- variability_table(CAP_bray_end_MBOA)
+
+# ANOVA
+CAP_bray_end_MBOA_anova <- anova.cca(CAP_bray_end_MBOA, permutations=99999)
+pander(CAP_bray_end_MBOA_anova[1:4])
+
+# aov(CAP_bray_end_MBOA_anova)
+
+# plot
+title <- paste("[SynCom * Treatment: ", 
+               format(CAP_end_MBOA_bray_var_tbl["constrained", "proportion"] * 100, 
+                      digits=2, nsmall=1), 
+               "% of variance, P = ", 
+               format(CAP_bray_end_MBOA_anova[1, 4], digits=2), 
+               "]", sep = "")
+
+CAP_end_MBOA <- plot_ordination(all_phy_info_end, CAP_bray_end_MBOA, type="samples", color="groups", shape="SynCom")+
+      # geom_point(size = 4)+
+      scale_color_manual(values= level_cols_groups_end_MBOA, 
+                          labels = c("nonSC DMSO", "metSC DMSO", "nonSC MBOA low", "metSC MBOA low", "nonSC MBOA high", "metSC MBOA high")) +
+      scale_shape_manual(values= c(16,1), labels = c("nonSC", "metSC"))+
+      stat_ellipse(type = "t") +
+      ggtitle(title) +
+      theme(plot.title = element_text(size=9, face = "bold")) +
+      theme_bw() +
+      labs(color = " ", shape = " ")
+#png("fig6.png",width=3600, height=2800, res=600)
+CAP_end_MBOA
+#dev.off()
+
+
+ggsave(plot = CAP_end_MBOA, filename = "Fig4B_CAP_end_MBOA.svg", path = "../../all_figures",  
+       width = 12, height = 8, dpi = 300, scale = 1, units = "cm")
+```
+
+# statistics
+using PERMANOVA
+
+All data
+
+```{r, warning=F, echo=F, tidy=T}
+metadata <- as(sample_data(all_phy_info_end), "data.frame")
+
+# Treatment
+adonis2(distance(all_phy_info_end, method="bray") ~ Treatment/SynCom,
+       data = metadata) %>% knitr::kable()
+
+# SynCom
+adonis2(distance(all_phy_info_end, method="bray") ~ SynCom,
+       data = metadata) %>% knitr::kable()
+
+# Treatment/SynCom
+adonis2(distance(all_phy_info_end, method="bray") ~ Treatment*SynCom,
+       data = metadata) %>% knitr::kable()
+
+adonisTSC<- adonis2(distance(all_phy_info_end, method="bray") ~ Treatment*SynCom,
+       data = metadata) %>% knitr::kable()
+
+# Treatment/SynCom/Replicate
+#??
+```
+
+without MBOA low treatment
+
+```{r, warning=F, echo=F, tidy=T}
+all_phy_info_end_MBOA_high = subset_samples(all_phy_info_end, Treatment != "MBOA_low")
+metadata_end_high <- as(sample_data(all_phy_info_end_MBOA_high), "data.frame")
+
+# Treatment
+adonis2(distance(all_phy_info_end_MBOA_high, method="bray") ~ Treatment/SynCom,
+       data = metadata_end_high) %>% knitr::kable()
+
+# SynCom
+adonis2(distance(all_phy_info_end_MBOA_high, method="bray") ~ SynCom,
+       data = metadata_end_high) %>% knitr::kable()
+
+# Treatment/SynCom
+adonis2(distance(all_phy_info_end_MBOA_high, method="bray") ~ Treatment*SynCom,
+       data = metadata_end_high) %>% knitr::kable()
+
+adonisTSC<- adonis2(distance(all_phy_info_end_MBOA_high, method="bray") ~ Treatment*SynCom,
+       data = metadata_end_high) %>% knitr::kable()
+```
+
+without MBOA high treatment
+
+```{r, warning=F, echo=F, tidy=T}
+all_phy_info_end_MBOA_low = subset_samples(all_phy_info_end, Treatment != "MBOA_high")
+metadata_end_low <- as(sample_data(all_phy_info_end_MBOA_low), "data.frame")
+
+# Treatment
+adonis2(distance(all_phy_info_end_MBOA_low, method="bray") ~ Treatment/SynCom,
+       data = metadata_end_low) %>% knitr::kable()
+
+# SynCom
+adonis2(distance(all_phy_info_end_MBOA_low, method="bray") ~ SynCom,
+       data = metadata_end_low) %>% knitr::kable()
+
+# Treatment/SynCom
+adonis2(distance(all_phy_info_end_MBOA_low, method="bray") ~ Treatment*SynCom,
+       data = metadata_end_low) %>% knitr::kable()
+
+adonisTSC<- adonis2(distance(all_phy_info_end_MBOA_low, method="bray") ~ Treatment*SynCom,
+       data = metadata_end_low) %>% knitr::kable()
+```
+
+# Abundance normalized with community size
+## Absolute abundance 
+
+Since the total community size differs between the treatment and the sequencing gives relative abunances of the sequences in the samples, we normalized the sequence counts with the total community size to represent the absolute amount of each strain in the sample. 
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+mean_OD <- read_rds("../4_Community_size_SynCom/mean_OD.rds")
+
+mean_OD %<>%  
+  mutate(chemical = gsub("MBOA 500 µM", "MBOA_500µM", chemical)) %>% 
+  mutate(chemical = gsub("MBOA 2500 µM", "MBOA_2500µM", chemical)) %>% 
+  mutate(groups = interaction(SynCom, chemical, sep = "_")) %>% as.data.frame() %>% dplyr::rename(mean_OD = mean) %>% dplyr::select(mean_OD, groups)
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+mean_Abundance <- PHYSEQ_melt_info %>% group_by(groups, ASV_ID) %>% dplyr::summarise(Abundance_mean = mean(Abundance))
+
+tot_Abundance <- mean_Abundance %>% mutate(Abundance_mean = replace_na(Abundance_mean, 0)) %>% as.data.frame() %>% dplyr::group_by(groups) %>% dplyr::summarise(Abundance_tot = sum(Abundance_mean))
+
+Abundance_OD_groups <- left_join(tot_Abundance %>% filter(!groups %in% c("metSC input", "nonSC input")), mean_OD, by = "groups") %>% mutate(Abundance_tot_OD_ratio = Abundance_tot / mean_OD) 
+
+PHYSEQ_melt_info_OD <- left_join(PHYSEQ_melt_info, Abundance_OD_groups, by = "groups")
+
+PHYSEQ_melt_info_OD_norm <- PHYSEQ_melt_info_OD %>% mutate(Abundance_OD_ratio = Abundance/Abundance_tot_OD_ratio) 
+```
+
+```{r, warning=F, echo=F, tidy=T, message=F}
+stacked_abundance_plot_MBOA_OD <- PHYSEQ_melt_info_OD_norm %>%
+  filter(!Treatment %in% "no") %>% 
+  filter(ASV_ID %in% c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8")) %>%
+  mutate(ASV_ID = factor(ASV_ID, levels = c("ASV_1", "ASV_2", "ASV_3", "ASV_4", "ASV_5", "ASV_7", "ASV_6",  "ASV_8"))) %>%
+  ggplot(aes(x = Treatment, y = Abundance_OD_ratio)) +
+  geom_bar(aes(fill = ASV_ID), stat="summary") +
+  scale_fill_manual(values = level_cols_ASV_ID, labels = c("LMX9231", "LMN1", "LST17", "LMX9", "LBA21", "LMG1", "LMI1x", "LMB2")) +
+  facet_wrap(~ SynCom) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5))+
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0)))+
+  # theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0.5, size = 25/.pt),
+  #       axis.text.y=element_text(size = 25/.pt),
+  #       axis.title = element_text(size = 25/.pt),
+  #       plot.title = element_text(size = 25/.pt)) +
+  labs(fill = " ",
+       x = " ",
+       y = "Abundance [%] \n in community size [OD600]")
+
+stacked_abundance_plot_MBOA_OD
+
+ggsave(plot = stacked_abundance_plot_MBOA_OD, filename = "FigS_single_abundance_plot_MBOA_OD.svg", path = "../../all_figures",  
+       width = 10, height = 9, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+

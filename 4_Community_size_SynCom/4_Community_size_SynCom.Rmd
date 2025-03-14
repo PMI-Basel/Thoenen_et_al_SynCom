@@ -1,0 +1,260 @@
+---
+title: "Community size"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Lisa Thoenen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+The aim of this experiment is to test the effect of MBOA on in vitro community dynamics including community size, community composition and metabolites. 
+
+To investigate the effect of MBOA on community size, the SynComs were plated on TSB media for to count colony forming units (CFU) and the optical density (OD) of the cultures was measured using a spectrophotometer. 
+
+The high MBOA treatment significantly reduces the community size but more in the nonSC than in the metSC. The metSC seems to be more tolerant to MBOA or at least has a member that dominates the community which is less affected by MBOA. However, compared to the control, this SynCom still has a reduced community size.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+rm(list=ls())
+```
+
+```{r,include=FALSE}
+# install.packages("dplyr")
+# install.packages("magrittr")
+# install.packages("tidyr")
+# install.packages("stringr")
+# install.packages("ggpubr")
+
+# install.packages("readxl")
+# install.packages("pander")
+# install.packages("ggplot2")
+
+# install.packages("multcomp")
+# install.packages("multcompView")
+# install.packages("emmeans")
+# install.packages("forcats")
+# install.packages("readr")
+```
+
+```{r libraries, echo=F, message=F, warning=F}
+library("dplyr")
+library("magrittr")
+library("tidyr")
+library("stringr")
+library("ggpubr")
+
+library("readxl")
+library("pander")
+library("ggplot2")
+
+library("multcomp")
+library("multcompView")
+library("emmeans")
+library("forcats")
+library("ggbeeswarm")
+library("readr")
+```
+
+```{r functions, echo=F, message=F, warning=F}
+give.n <- function(x){
+  return(c(y = median(x)*1.05, label = length(x))) 
+  # experiment with the multiplier to find the perfect position
+}
+```
+
+```{r,include=FALSE}
+data <- readxl::read_excel("./Input/4_CFU_data.xlsx", na = "NA")
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+data_SC <- data %>% 
+  filter(SynCom %in% c("S", "R")) %>% 
+  mutate(SynCom = gsub("S", "nonSC", SynCom)) %>% 
+  mutate(SynCom = gsub("R", "metSC", SynCom)) %>% 
+  mutate(SynCom = factor(SynCom, levels = c("nonSC", "metSC"))) %>% 
+  mutate(chemical = gsub("MBOA_low", "MBOA 500 µM", chemical)) %>% 
+  mutate(chemical = gsub("MBOA_high", "MBOA 2500 µM", chemical)) %>% 
+  mutate(chemical = factor(chemical, levels = c("DMSO", "MBOA 500 µM", "MBOA 2500 µM")))
+```
+
+```{r factor formatting, warning=F, echo=F, message=F}
+data_SC$treatment <- factor(data_SC$treatment, levels=c("SD", "RD", "SL", "RL", "SH", "RH", "SA"))
+```
+
+```{r,include=FALSE}
+data_SC$CFU_ml_log <- log10(data_SC$CFU_ml)
+```
+
+# Colony froming units (CFU)
+
+```{r, warning = FALSE,echo = FALSE}
+CFU_ml_log.aov <- aov(CFU_ml_log ~ SynCom*chemical*Replicate, data = data_SC)
+summary(CFU_ml_log.aov) %>% pander()
+cld_dat_CFU <- as.data.frame( cld(emmeans(CFU_ml_log.aov, ~ SynCom*chemical*Replicate),
+                   Letters = letters ) ) 
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+CFU_erlen <- data_SC %>%  
+  filter(treatment %in% c("RD", "RH", "RL", "SD", "SH", "SL" )) %>% 
+  ggplot(aes(x = SynCom, y = log10(CFU_ml))) +
+  # geom_bar(aes(fill = SynCom), stat = "summary", alpha = 0.5, show.legend = FALSE) +
+  geom_boxplot(aes(fill = SynCom), alpha = 0.5, show.legend = FALSE) +
+  ggbeeswarm::geom_quasirandom(aes(fill = SynCom), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE)+
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC", hide.ns = TRUE, size = 4, label.y = 9.9, method.args = list(p.adjust.methods = "bonferroni", alternative = "greater", var.equal = FALSE)) +
+  theme_classic() +
+  # scale_y_continuous(expand = expansion(c(0, 0.1)), limits = c(0, 10), breaks = seq(0, 10, by = 2))+
+  scale_fill_manual(values = c("#fdbf6f", "#e31a1c"))+
+  facet_wrap(~ chemical, nrow = 1) +
+  labs(y = "log10(CFU) [CFU/ml]",
+       x = "", 
+       title = "growth SynComs",
+       fill = " ")
+
+
+CFU_erlen
+
+ggsave(plot = CFU_erlen, filename = "SuppFig_CFU_erlen.svg", path = "../../all_figures", width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+CFU_erlen_bar <- data_SC %>%  
+  filter(treatment %in% c("RD", "RH", "RL", "SD", "SH", "SL" )) %>% 
+  ggplot(aes(x = SynCom, y = CFU_ml)) +
+  geom_bar(aes(fill = SynCom), stat = "summary", alpha = 0.5, show.legend = FALSE) +
+  # geom_boxplot(aes(fill = SynCom), alpha = 0.5, show.legend = FALSE) +
+  geom_errorbar(stat = "summary", width=0.2) +
+  ggbeeswarm::geom_quasirandom(aes(fill = SynCom), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE)+
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC", hide.ns = TRUE, size = 4, label.y = 7800000000, method.args = list(p.adjust.methods = "bonferroni", alternative = "greater", var.equal = FALSE)) +
+  theme_classic() +
+  scale_y_continuous(expand = expansion(c(0, 0.1)))+
+  scale_fill_manual(values = c("#fdbf6f", "#e31a1c"))+
+  facet_wrap(~ chemical, nrow = 1) +
+  labs(y = "CFU [CFU/ml]",
+       x = "", 
+       title = "growth SynComs",
+       fill = " ")
+
+
+CFU_erlen_bar
+
+ggsave(plot = CFU_erlen_bar, filename = "SuppFig_CFU_erlen_bar.svg", path = "../../all_figures", width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+CFU_erlen_chem <- data_SC %>%  
+  filter(treatment %in% c("RD", "RH", "RL", "SD", "SH", "SL" )) %>% 
+  ggplot(aes(x = chemical, y = log10(CFU_ml))) +
+  geom_boxplot(aes(fill = chemical), alpha = 0.7, show.legend = FALSE) +
+  ggbeeswarm::geom_quasirandom(aes(fill = chemical), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE)+
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "DMSO", hide.ns = TRUE, size = 4, label.y = 9.9, method.args = list(p.adjust.methods = "bonferroni", alternative = "greater", var.equal = FALSE)) +
+  theme_classic() +
+  scale_fill_manual(values = c("#9b5e4f",  "#464695", "#ac2f5a"))+
+  facet_wrap(~ SynCom, nrow = 1) +
+  labs(y = "log10(CFU) [CFU/ml]",
+       x = "", 
+       title = "growth SynComs",
+       fill = " ")
+
+CFU_erlen_chem
+
+ggsave(plot = CFU_erlen_chem, filename = "SuppFigCFU_erlen_chem.svg", path = "../../all_figures",  width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+
+# Optical density (OD)
+
+```{r, warning=F, echo=FALSE}
+ODno_AMPO.aov <- data_SC %>% filter(chemical != "AMPO") %>% aov(OD ~ SynCom*chemical*Replicate, data = .)
+summary(ODno_AMPO.aov) %>% pander()
+cld_dat_OD_no_AMPO <- as.data.frame( cld(emmeans(ODno_AMPO.aov, ~ SynCom*chemical*Replicate),
+                   Letters = letters ) ) 
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+OD_erlen <- data_SC %>%  
+  filter(treatment %in% c("RD", "RH", "RL", "SD", "SH", "SL" )) %>% 
+  ggplot(aes(x = SynCom, y = OD)) +
+  # geom_bar(aes(fill = SynCom), stat = "summary", alpha = 0.5, show.legend = FALSE) +
+  geom_boxplot(aes(fill = SynCom), alpha = 0.5, show.legend = FALSE) +
+  ggbeeswarm::geom_quasirandom(aes(fill = SynCom), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE)+
+  ylim(0, 4.5) +
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC", hide.ns = TRUE, size = 4, label.y = 4.3, method.args = list(p.adjust.methods = "bonferroni", alternative = "greater", var.equal = FALSE)) +
+  theme_classic() +
+  scale_fill_manual(values = c("#fdbf6f", "#e31a1c"))+
+  # scale_y_continuous(expand = expansion(c(0, 0.1)), limits = c(0, 4.5), breaks = seq(0, 4.5, by = 1))+
+  facet_wrap(~ chemical, nrow = 1) +
+  labs(y = "max. density increase [OD600]",
+       x = "", 
+       title = "growth SynComs",
+       fill = " ")
+
+OD_erlen
+
+ggsave(plot = OD_erlen, filename = "Fig_3_OD_erlen.svg", path = "../../all_figures", width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+OD_erlen_bar <- data_SC %>%  
+  filter(treatment %in% c("RD", "RH", "RL", "SD", "SH", "SL" )) %>% 
+  ggplot(aes(x = SynCom, y = OD)) +
+  geom_bar(aes(fill = SynCom), stat = "summary", alpha = 0.5, show.legend = FALSE) +
+  # geom_boxplot(aes(fill = SynCom), alpha = 0.5, show.legend = FALSE) +
+  ggbeeswarm::geom_quasirandom(aes(fill = SynCom), shape = 21, alpha = 0.7,  width = 0.3, show.legend = FALSE)+
+  geom_errorbar(stat = "summary", width=0.2) +
+  ylim(0, 4.5) +
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "nonSC", hide.ns = TRUE, size = 4, label.y = 4.3, method.args = list(p.adjust.methods = "bonferroni", alternative = "greater", var.equal = FALSE)) +
+  theme_classic() +
+  scale_fill_manual(values = c("#fdbf6f", "#e31a1c"))+
+  scale_y_continuous(expand = expansion(c(0, 0.1)), limits = c(0, 4.5), breaks = seq(0, 4.5, by = 1))+
+  facet_wrap(~ chemical, nrow = 1) +
+  labs(y = "max. density increase [OD600]",
+       x = "", 
+       title = "growth SynComs",
+       fill = " ")
+
+OD_erlen_bar
+
+ggsave(plot = OD_erlen_bar, filename = "Fig_3_OD_erlen_bar.svg", path = "../../all_figures", width = 8.8, height = 12, dpi = 300, scale = 1, units = "cm")
+```
+
+```{r, echo=FALSE, warning=FALSE, include = FALSE}
+# mean OD per treatment
+mean_OD <- data_SC %>% na.omit() %>% dplyr::group_by(treatment, SynCom, chemical) %>% dplyr::summarise(mean = mean(OD))
+
+write_rds(mean_OD, "./Output/mean_OD.rds")
+```
+
+# Correlation OD ~ CFU
+```{r, warning=FALSE, message=FALSE, echo=FALSE, error=FALSE, fig.width=7, fig.height=5}
+CFU_OD_cor_SynCom <- data_SC %>% 
+  filter(!chemical %in% NA) %>% 
+  ggplot(aes(x = OD, y = CFU_ml)) +
+  geom_smooth(method = "lm", color="black", formula = y ~ x)  + 
+  geom_point(aes(colour = SynCom, shape = chemical), alpha = 0.7, size = 3) +
+  stat_cor(method = "pearson", label.x = 2, label.y = 8000000000, cex = 10/.pt) +
+  scale_color_manual(values = c("#fdbf6f", "#e31a1c"))+
+  scale_shape_manual(values = c(1, 17, 8))+
+  theme_bw() +
+  labs(x = "max. density increase [OD600]", 
+       y = "log10(CFU) [CFU/ml]")
+
+CFU_OD_cor_SynCom
+
+ggsave(plot = CFU_OD_cor_SynCom, filename = "FigS5D_CFU_OD_cor_SynCom.svg", path = "../../all_figures", width = 11.5, height = 8, dpi = 300, scale = 1, units = "cm")
+```
+
+
+```{r}
+sessionInfo()
+```
+
