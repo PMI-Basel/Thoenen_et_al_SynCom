@@ -1,0 +1,264 @@
+---
+title: "MBOA metabolization by LMX9231 and LMB2 in shake flasks"
+subtitle: "Thoenen et al. BX SynComs"
+author: "Christine Pestalozzi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+rm(list=ls())
+```
+
+```{r,include=FALSE}
+# install.packages("tidyverse") 
+# install.packages("magrittr") # for the %<>% function
+# install.packages("ggpubr")
+# install.packages("multCompView")
+```
+
+```{r,include=FALSE}
+library("tidyverse")
+library("magrittr")
+library("ggpubr")
+library("multcompView")
+
+```
+
+
+Metabolite samples were prepared as described before (Thoenen et al 2024, Nat Commun).
+Samples are quantified based on integrated peak areas (relative quantification only). (No standard curves available by mistake)
+
+Read in the metadata 
+```{r read in metadata, include=FALSE}
+meta <- read.delim(file = "Input/20250623_Samples_Berne_Metabolization_Pestalozzi_corr.txt", header = T) 
+meta %<>% select(1:9) # note that some columns only contained information for reading of the data. These are not kept here
+
+
+```
+
+
+Read in the metabolite data (keep only data for compounds that were detected in at least one sample)
+```{r read in MS data, include=FALSE}
+# First read in the BXs usually measured with standard
+# 1. Read in the full file as lines
+lines <- readLines("Input/20250623_PM_CP_25CMP18_MBOA.txt") #Bxs
+
+# 2. Find compound header lines (e.g., "Compound 1: Name")
+compound_header_indices <- grep("^Compound \\d+: ", lines)
+
+# 3. Add an artificial end index to loop over last compound
+compound_header_indices <- c(compound_header_indices, length(lines) + 1)
+
+# 4. For each compound, extract the relevant chunk and parse
+compound_tables <- map2_df(
+  compound_header_indices[-length(compound_header_indices)],
+  compound_header_indices[-1] - 1,
+  function(start, end) {
+    # Extract lines for this compound
+    chunk <- lines[start:end]
+    
+    # Extract compound name from first line
+    compound_name <- str_match(chunk[1], "^Compound \\d+:\\s*(.+)$")[,2]
+    
+    # Skip the first line (compound name) and blank line
+    table_lines <- chunk[-c(1,2)]
+    
+    # Read as a CSV from text with tab delimiter
+    table <- read_tsv(paste(table_lines, collapse = "\n"), show_col_types = FALSE)
+    
+    # Add compound name column and select desired columns
+    table <- table %>%
+      mutate(Compound = compound_name) %>%  
+      dplyr::select(Sample.Nr = '#', Name, Type, Area, Detection.Flags = `Detection Flags`, Compound)
+    
+    return(table)
+  }
+)
+
+# add additionally the data for AMP
+AMP_data <- read.delim("Input/20250623_PM_CP_25CMP18_HMPAA.txt", skip = 6, nrows = 87) %>% mutate(Compound = "AMP") %>% dplyr::select(Sample.Nr =X, Name, Type, Area, Detection.Flags, Compound)
+
+HMPAA_data <- read.delim("Input/20250623_PM_CP_25CMP18_HMPAA.txt", skip = 97) %>% mutate(Compound = "HMPAA") %>% dplyr::select(Sample.Nr =X, Name, Type, Area, Detection.Flags, Compound)
+
+
+compound_tables <- rbind(compound_tables, AMP_data, HMPAA_data)
+# get a list of detected compounds and make results table "met" containing only these
+compound_detected <- compound_tables %>% group_by(Compound) %>% dplyr::filter(!(is.na(Area))) %>% summarise(n = n()) %>% pull(Compound)
+met <- compound_tables %>% dplyr::filter(Compound %in% compound_detected)
+
+# View(met)
+
+# clean up environment
+rm(compound_tables, compound_header_indices, lines, AMP_data, HMPAA_data)
+
+``` 
+
+Combine the metadata and metabolite data
+```{r annotate data, include=FALSE}
+# Dilution calculation 
+data <- met %>% 
+  select(Sample.Nr,  Name, Type, Area, Detection.Flags, Compound) %>% 
+  left_join(meta %>% rename(Fraction = Type), by = c("Sample.Nr" = "Number.HPLC.Vial_corr")) %>% 
+  mutate(Compound = factor(Compound, levels = c("MBOA", "AMP", "AMPO", "AAMPO", "HMPAA"))) #%>% 
+  # mutate() # here multiply the samples required by 3
+
+rm(met, meta)
+```
+
+Colors for plotting etc
+```{r color vectors, include=FALSE}
+Compound_colors <- setNames(c("darkblue", "maroon", "darkred", "firebrick1", "gold2"), nm = c("MBOA", "AMP", "AMPO", "AAMPO", "HMPAA"))
+
+```
+
+
+# Degradation of MBOA by LMX9231 in Erlenmeyer flasks
+Medium at t0
+```{r BXs medium shake flask t0, echo=F, message=F, warning=F, include = F}
+
+# medium at the start
+data.0h <- data %>% 
+  dplyr::filter(Exp == "25CMP18", TP == "0h", grepl("TSB", MBOA), MBOA != "TSB_MBOANew") %>% 
+  dplyr::filter(Compound != "AMP") %>% 
+  mutate(Compound = factor(Compound, levels = c("MBOA",  "AMPO", "AAMPO", "HMPAA"))) 
+
+plot_t0Medium <- data.0h %>% 
+  ggplot(aes(x = MBOA, y = Area))+
+  geom_bar(aes(fill = Compound), stat="summary", position="stack", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = Compound_colors) +
+  # geom_point()+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  facet_grid(~Compound, scales = "free_y")+
+  labs(y = "concentration [Area]", 
+       x = "", 
+       title = "Medium start t0")
+
+plot_t0Medium
+
+```
+
+```{r prepare data and plot including t0,echo=F, message = F, warning=F, include=F}
+data.LMX9231 <- data %>% dplyr::filter(Exp == "25CMP18", TP %in% c("0h", "72h"),grepl("TSB", MBOA), MBOA != "TSB_MBOANew" ) %>% 
+  mutate(Treatment2 = ifelse(TP == "0h", paste0(Treatment, "_0h"), Treatment)) %>% 
+  dplyr::filter(Compound != "AMP") %>%  # AMP only traces, not truly detected therefore not shown
+  mutate(Compound = factor(Compound, levels = c("MBOA", "AMPO", "AAMPO", "HMPAA"))) %>% 
+  mutate(Treatment = factor(Treatment, levels = c("NBC", "LMX9231", "LMB2")),
+         Treatment2 = factor(Treatment2, levels = c("NBC_0h","NBC", "LMX9231", "LMB2")))
+
+LMX9231_shake_incl_0h <- data.LMX9231 %>% 
+  dplyr::filter(MBOA == "TSB_MBOA") %>% 
+  ggplot(aes(x = Treatment2, y = Area))+
+  geom_bar(aes(fill = Compound), stat="summary", position="dodge", size = 2, show.legend = TRUE) +
+  geom_point()+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  scale_fill_manual(values = Compound_colors) +
+  facet_wrap(~Compound, scales = "free_y", nrow= 1)+
+   labs(title = "50% TSB + 500 µM MBOA",
+       x = "",
+       y = "concentration [Area]")
+
+LMX9231_shake_incl_0h
+
+# ggsave(plot = LMX9231_shake_incl_0h, filename = "Output/LMX9231_LMB2_shake_flask_72h_incl0h.pdf", width = 20, height = 8, dpi = 300, scale = 1, units = "cm")
+
+# ggsave(plot = LMX9231_shake_incl_0h, filename = "Output/LMX9231_LMB2_shake_flask_72h_incl0h.png", width = 20, height = 8, dpi = 300, scale = 1, units = "cm")
+# MBOA detected in the NBC TSB_DMSO sample. This sample must have been mixed up in the measurements. Check the original data. 
+
+```
+
+
+Plot showing degradation of MBOA and production of AMPO and AAMPO by LMB2 and LMX9231 in shake flasks. Note that the AMP that is detected is in same range as for the DMSO control, hence not realiably detected. Therefore AMP is not shown.
+Compared to NBC, LMX9231 shows reduced MBOA after 3 days of incubation, revealing some degradation of MBOA is taking place. In LMB2 cultures, MBOA is no longer detected or close to the detection limit. 
+In line with the MBOA measurements, more AMPO is detected in LMB2 than in LMX9231 samples. Please note that AMPO quantification can be tricky especially at high concentrations due to low solubility. 
+Some AAMPO can be detected in LMX9231 samples (close to detection limit).
+```{r final plot with stats, echo=F, message=F, warning=F}
+
+Final_plot<- data.LMX9231 %>% 
+  dplyr::filter(TP == "72h", MBOA == "TSB_MBOA") %>% 
+  dplyr::filter(Compound != "AMP") %>% 
+  ggplot(aes(x = Treatment2, y = Area))+
+  geom_bar(aes(fill = Compound), stat="summary", position="dodge", size = 2, show.legend = TRUE) +
+  # ggbeeswarm::geom_quasirandom(aes(fill = Compound), shape = 21,   width = 0.3, show.legend = FALSE)+
+  ggbeeswarm::geom_quasirandom( width = 0.3, show.legend = FALSE)+
+  geom_errorbar(stat = "summary", width=0.2) +
+  theme_classic() +
+  scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+  scale_fill_manual(values = Compound_colors) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0, colour = "black"), 
+        axis.text.y = element_text(colour = "black"), strip.background = element_blank()) +
+  facet_wrap(~Compound, scales = "free_y", nrow = 1)+
+ labs(title = "MBOA metabolization in complex medium in shake flask",
+       x = "",
+       y = "concentration [Area]")
+
+# Final_plot
+
+#Statistics
+data.stats <-  Final_plot$data  %>% group_by(Compound, Treatment) %>% filter(sum(!is.na(Area)) >=2) %>% ungroup() # here remove all teh ones that do not contain sufficient amounts of samples to detect
+t.test <- compare_means(Area ~ Treatment, data = data.stats, group.by = "Compound", method = "t.test", p.adjust.method = "bonferroni") %>% 
+  mutate(p.signif.sign = ifelse(p.adj <= 0.05, "*", "ns"))
+
+# get the y-positions
+y_pos <- data.stats %>% group_by(Compound) %>% summarise(y.position = max(Area, na.rm = T)*1.01)
+t.test.ypos <- t.test  %>%  left_join(y_pos) %>% ungroup() %>%  filter(p.signif.sign != "ns") %>% group_by(Compound) %>%  mutate(y.position.plot = y.position + row_number()*y.position*0.09) %>% ungroup()
+
+Final_plot_stats <- Final_plot +
+  theme(strip.background = element_blank())+
+  stat_pvalue_manual(t.test.ypos , y.position = "y.position.plot", label = "p.signif.sign")
+Final_plot_stats
+
+
+# ggsave(plot = Final_plot, filename = "Output/LMX9231_LMB2_shake_flask.svg", width = 20, height = 8.8, dpi = 300, scale = 1, units = "cm")
+# ggsave(plot = Final_plot, filename = "Output/LMX9231_LMB2_shake_flask.png", width = 20, height = 8.8, dpi = 300, scale = 1, units = "cm")
+ggsave(plot = Final_plot_stats, filename = "Output/LMX9231_LMB2_shake_flask_stats.pdf", width = 20, height = 8, dpi = 300, scale = 1, units = "cm")
+ggsave(plot = Final_plot_stats, filename = "Output/LMX9231_LMB2_shake_flask_stats.png", width = 20, height = 8, dpi = 300, scale = 1, units = "cm")
+ggsave(plot = Final_plot_stats, filename = "Output/LMX9231_LMB2_shake_flask_stats_diffsize.pdf", width = 14, height = 9, dpi = 300, scale = 1, units = "cm")
+
+```
+
+```{r stacked plot, echo=F, message=F, warning=F}
+
+Final_plot_stacked <- data.LMX9231 %>% 
+  dplyr::filter(TP == "72h", MBOA == "TSB_MBOA") %>% 
+  mutate(Compound2= factor(Compound, levels = rev(levels(Compound)))) %>% 
+  dplyr::filter(Compound != "AMP") %>% 
+  ggplot(aes(x = Treatment2, y = Area))+
+  geom_bar(aes(fill = Compound2), stat="summary", position="stack", size = 2, show.legend = TRUE) +
+  scale_fill_manual(values = Compound_colors) +
+  theme_classic()+
+  scale_y_continuous(expand = c(0,0))+
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  labs(fill = "Compound",
+       x = "",
+       y = "concentration [Area]", 
+       title = "all replicates stacked")
+
+
+Final_plot_stacked
+
+# ggsave(plot = Final_plot_stacked, filename = "Output/LMX9231_LMB2_shake_flask.svg", width = 10, height = 8, dpi = 300, scale = 1, units = "cm")
+# ggsave(plot = Final_plot_stacked, filename = "Output/LMX9231_LMB2_shake_flask.png", width = 10, height = 8, dpi = 300, scale = 1, units = "cm")
+
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
