@@ -205,56 +205,110 @@ met %>%
 ```
 
 ```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(7,4)}
-Treatment.labs <- c("DMSO", "MBOA low", "MBOA high")
+Treatment.labs <- c("DMSO", "MBOA 500 µM", "MBOA 2500 µM")
 names(Treatment.labs) <- c("DMSO", "MBOA_low", "MBOA_high")
 
 met_erlenemyer <- met %>% 
-  mutate(Strain = gsub("S", "SCS", Strain)) %>% 
-  mutate(Strain = gsub("R", "SCR", Strain)) %>% 
+  mutate(Strain = gsub("no", "NBC", Strain)) %>% 
+  mutate(Strain = gsub("S", "nonSC", Strain)) %>% 
+  mutate(Strain = gsub("R", "metSC", Strain)) %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
   filter(!Treatment %in% "AMPO") %>% 
   filter(Compound %in% c("MBOA", "AAMPO", "AMPO")) %>% 
   ggplot(aes(x = Strain, y = uMol, group = Compound)) +
-  geom_bar(aes(fill = Compound), stat="identity", position="stack", size = 2, show.legend = TRUE) +
+  geom_bar(aes(fill = Compound), stat="summary", position="stack", size = 2, show.legend = TRUE) +
   facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
   scale_fill_manual(values = c("firebrick1", "darkred", "darkblue")) +
   theme_classic() +
-  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.5)))+
-  labs(title = " ",
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0, colour = "black"), 
+        axis.text.y = element_text(colour = "black"), strip.background = element_blank()) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.5)))+
+  labs(title = "metabolites targeted",
        x = "",
-       y = "concentration [µMol]")
+       y = "Concentration [µM]")
 
 met_erlenemyer
 
-# ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.pdf",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
-# 
-# ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.svg", width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+# ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.pdf", path = "Output", create.dir = TRUE, width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+
+ggsave(plot = met_erlenemyer, filename = "met_erlenemyer.svg", path = "Output",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
 ```
 
 ```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE, fig.dim = c(7,4)}
-Treatment.labs <- c("DMSO", "MBOA low", "MBOA high")
-names(Treatment.labs) <- c("DMSO", "MBOA_low", "MBOA_high")
-
 met_area_erlenemyer <- met %>% 
-  mutate(Strain = gsub("S", "SCS", Strain)) %>% 
-  mutate(Strain = gsub("R", "SCR", Strain)) %>% 
+  mutate(Strain = gsub("no", "NBC", Strain)) %>% 
+  mutate(Strain = gsub("S", "nonSC", Strain)) %>% 
+  mutate(Strain = gsub("R", "metSC", Strain)) %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
   filter(!Treatment %in% "AMPO") %>% 
   ggplot(aes(x = Strain, y = Area_sample, group = Compound)) +
-  geom_bar(aes(fill = Compound), stat="identity", position="stack", size = 2, show.legend = TRUE) +
+  geom_bar(aes(fill = Compound), stat="summary", position="stack", size = 2, show.legend = TRUE) +
   facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
   scale_fill_manual(values = c("firebrick1", "darkred", "darkblue", "gold2"), labels = c("AAMPO", "AMPO", "MBOA", "HMPAA")) +
   theme_classic() +
-  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0 )) +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0, colour = "black"), 
+        axis.text.y = element_text(colour = "black"), strip.background = element_blank()) +
   scale_y_continuous(expand = expansion(mult = c(0,0.5)))+
-  labs(title = " ",
+  labs(title = "metabolites untargeted",
        x = "",
-       y = "concentration [Area]")
+       y = "Concentration [Area]")
 
 met_area_erlenemyer
 
-# ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.pdf",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
-# 
-# ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.svg", width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+# ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.pdf",path = "Output",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+
+ggsave(plot = met_area_erlenemyer, filename = "met_area_erlenemyer.svg", path = "Output",width = 13.2, height = 8, dpi = 300, scale = 1, units = "cm")
+```
+
+
+
+```{r, message=FALSE, echo=FALSE, error=FALSE, warning = FALSE,include = FALSE}
+#export for Supp Figure 5
+
+met_erlenemyer_A <- met %>% 
+  mutate(Strain = gsub("no", "NBC", Strain)) %>% 
+  mutate(Strain = gsub("S", "nonSC", Strain)) %>% 
+  mutate(Strain = gsub("R", "metSC", Strain)) %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
+  filter(grepl("MBOA", Treatment)) %>% 
+  filter(Compound %in% c("MBOA", "AAMPO", "AMPO")) %>% 
+  ggplot(aes(x = Strain, y = uMol, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat="summary", position="stack", size = 2, show.legend = TRUE) +
+  facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
+  scale_fill_manual(values = c("firebrick1", "darkred", "darkblue", "gold2"), labels = c("AAMPO", "AMPO", "MBOA", "HMPAA")) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0, colour = "black"), 
+        axis.text.y = element_text(colour = "black"), strip.background = element_blank()) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.2)))+
+  labs(title = "metabolites targeted",
+       x = "",
+       y = "Concentration [µM]")
+
+met_area_erlenemyer_B <- met %>% 
+  mutate(Strain = gsub("no", "NBC", Strain)) %>% 
+  mutate(Strain = gsub("S", "nonSC", Strain)) %>% 
+  mutate(Strain = gsub("R", "metSC", Strain)) %>% 
+  mutate(Strain = factor(Strain, levels = c("NBC", "nonSC", "metSC"))) %>% 
+  filter(grepl("MBOA", Treatment)) %>% 
+  ggplot(aes(x = Strain, y = Area_sample, group = Compound)) +
+  geom_bar(aes(fill = Compound), stat="summary", position="stack", size = 2, show.legend = TRUE) +
+  facet_grid(~ Treatment,  labeller = labeller(Treatment = Treatment.labs), scales = "fixed") +
+  scale_fill_manual(values = c("firebrick1", "darkred", "darkblue", "gold2"), labels = c("AAMPO", "AMPO", "MBOA", "HMPAA")) +
+  theme_classic() +
+  theme(axis.text.x=element_text(angle = -90, hjust = 0, vjust = 0, colour = "black"), 
+        axis.text.y = element_text(colour = "black"), strip.background = element_blank()) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.2)))+
+  labs(title = "metabolites untargeted",
+       x = "",
+       y = "Concentration [Area]")
+
+met_area_erlenemyer_B
+
+combined <- ggarrange(met_erlenemyer_A, met_area_erlenemyer_B, labels = c("A", "B"), ncol = 2, common.legend = F, legend = "right")
+combined
+
+ggsave(plot = combined, filename = "FigS6AB_exported.pdf", path = "Output",width = 17.5, height = 9.3, dpi = 300, scale = 1, units = "cm")
+
 ```
 
 ```{r}
